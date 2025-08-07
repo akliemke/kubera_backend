@@ -1,25 +1,26 @@
+using kubera_webapp.Controllers;
+using kubera_webapp.Repository;
+
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAngular",
+        builder => builder.WithOrigins("http://localhost:4200")
+                          .AllowAnyMethod()
+                          .AllowAnyHeader());
+});
+
+builder.Services.AddSingleton<IConfiguration>(builder.Configuration);
+builder.Services.AddSingleton<BrokerRepository>();
+
 var app = builder.Build();
+app.UseCors("AllowAngular");
+
+app.MapReportEndpoints();
+app.MapBrokerEndpoints();
+app.MapFinancialEndpoints();
 
 app.MapGet("/", () => "Hello World!");
-app.MapGet("/corretoras", () => "List of brokers");
-app.MapGet("/corretoras/{codigo}", (string codigo) => $"Detalhes de uma corretora {codigo}");
-app.MapGet("/relatorios/cobranca/mensal/{ano_mes}", (string ano_mes) =>
-{
-    return $"Relatório mensal para o ano e mês: {ano_mes}";
-});
-app.MapGet("/relatorios/cobranca/anual/{ano}", (string ano) =>
-{
-    return $"Detalhes do relatório anual para o ano: {ano}";
-});
-app.MapGet("/relatorios/cobranca/diario/{data}", (string data) =>
-{
-    return $"Detalhes do relatório diário para a data: {data}";
-});
-app.MapGet("/processamento/{tipo}/{id}", (string tipo, string id) =>
-{
-    return $"Processamento do tipo {tipo} com ID {id}";
-});
-
 
 app.Run();
