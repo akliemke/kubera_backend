@@ -1,4 +1,6 @@
 ﻿using kubera_webapp.Models;
+using kubera_webapp.Repository;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
 namespace kubera_webapp.Controllers;
@@ -9,23 +11,24 @@ public static class BrokerController
     {
         var brokerGroup = app.MapGroup("/broker");
 
-        brokerGroup.MapGet("/", () =>
+        brokerGroup.MapGet("/", async (BrokerRepository brokerRepository) =>
         {
-            return "Lista de corretores";
+            var brokers = await brokerRepository.GetAllAsync();
+            return Results.Ok(brokers);
         });
 
-        brokerGroup.MapGet("/details/{code}", (string code) =>
-        {
-            BrokerModel n = new()
-            {
-                CNPJ = "aaaa",
-                BillingCurrency = "BRL",
-                Contacts = new List<string>() { "albertkliemke@gmail.com" },
-                Name = "BTG",
-                Code = 85
-            };
-            return n;
-        });
+        //brokerGroup.MapGet("/details/{code}", (string code) =>
+        //{
+        //    BrokerModel n = new()
+        //    {
+        //        CNPJ = "aaaa",
+        //        BillingCurrency = "BRL",
+        //        Contacts = new List<string>() { "albertkliemke@gmail.com" },
+        //        Name = "BTG",
+        //        Code = 85
+        //    };
+        //    return n;
+        //});
 
         brokerGroup.MapPost("/", ([FromBody] BrokerModel broker) =>
         {

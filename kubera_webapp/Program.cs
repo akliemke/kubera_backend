@@ -1,7 +1,20 @@
 using kubera_webapp.Controllers;
+using kubera_webapp.Infra;
 using kubera_webapp.Repository;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
+
+
+var connectionString = builder.Configuration.GetConnectionString("Default");
+
+if (string.IsNullOrEmpty(connectionString))
+{
+    throw new InvalidOperationException("Connection string 'Default' is not configured.");
+}
+
+builder.Services.AddDbContext<MgmtContext>(options =>
+    options.UseNpgsql(connectionString));
 
 builder.Services.AddCors(options =>
 {
