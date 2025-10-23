@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// add appsettings configuration file to the configuration sources
 
 var connectionString = builder.Configuration.GetConnectionString("Default");
 
@@ -13,7 +14,7 @@ if (string.IsNullOrEmpty(connectionString))
     throw new InvalidOperationException("Connection string 'Default' is not configured.");
 }
 
-builder.Services.AddDbContext<MgmtContext>(options =>
+builder.Services.AddDbContext<ManagementContext>(options =>
     options.UseNpgsql(connectionString));
 
 builder.Services.AddCors(options =>

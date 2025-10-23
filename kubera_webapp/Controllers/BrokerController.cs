@@ -17,19 +17,6 @@ public static class BrokerController
             return Results.Ok(brokers);
         });
 
-        //brokerGroup.MapGet("/details/{code}", (string code) =>
-        //{
-        //    BrokerModel n = new()
-        //    {
-        //        CNPJ = "aaaa",
-        //        BillingCurrency = "BRL",
-        //        Contacts = new List<string>() { "albertkliemke@gmail.com" },
-        //        Name = "BTG",
-        //        Code = 85
-        //    };
-        //    return n;
-        //});
-
         brokerGroup.MapPost("/", ([FromBody] BrokerModel broker) =>
         {
             return $"Broker {broker.Code} criado com sucesso!";
