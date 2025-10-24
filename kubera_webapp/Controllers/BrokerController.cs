@@ -1,5 +1,5 @@
-﻿using kubera_webapp.Models;
-using kubera_webapp.Repository;
+﻿using kubera_webapp.Infra;
+using kubera_webapp.Models;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -11,9 +11,16 @@ public static class BrokerController
     {
         var brokerGroup = app.MapGroup("/broker");
 
-        brokerGroup.MapGet("/", async (BrokerRepository brokerRepository) =>
+        brokerGroup.MapGet("/", async (BrokerRepository brokerRepository, CancellationToken cts) =>
         {
-            var brokers = await brokerRepository.GetAllAsync();
+            var brokers = await brokerRepository.GetAllAsync(cts);
+            return Results.Ok(brokers);
+        });
+
+        brokerGroup.MapGet("/{id}", async (string id, BrokerRepository brokerRepository, CancellationToken cts) =>
+        {
+            var brokers = await brokerRepository.GetAllAsync(cts);
+            var broker = brokers.Where( broker => broker.Id == Guid.Parse(id)).FirstOrDefault();
             return Results.Ok(brokers);
         });
 

@@ -1,21 +1,18 @@
 using kubera_webapp.Controllers;
 using kubera_webapp.Infra;
-using kubera_webapp.Repository;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // add appsettings configuration file to the configuration sources
 
-var connectionString = builder.Configuration.GetConnectionString("Default");
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
 if (string.IsNullOrEmpty(connectionString))
 {
     throw new InvalidOperationException("Connection string 'Default' is not configured.");
 }
 
-builder.Services.AddDbContext<ManagementContext>(options =>
-    options.UseNpgsql(connectionString));
 
 builder.Services.AddCors(options =>
 {
@@ -26,8 +23,8 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddSingleton<IConfiguration>(builder.Configuration);
+builder.Services.AddSingleton<IDbConnectionFactory, SqlConnectionFactory>();
 builder.Services.AddSingleton<BrokerRepository>();
-
 var app = builder.Build();
 app.UseCors("AllowAngular");
 
