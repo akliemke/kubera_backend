@@ -1,4 +1,4 @@
-﻿using Microsoft.Data.SqlClient;
+﻿using Npgsql;
 using System.Data;
 
 namespace kubera_webapp.Infra;
@@ -19,7 +19,7 @@ public sealed class SqlConnectionFactory(IConfiguration config) : IDbConnectionF
 
     public async Task<IDbConnection> CreateOpenConnectionAsync(CancellationToken ct)
     {
-        var conn = new SqlConnection(_cs);
+        var conn = new NpgsqlConnection(_cs);
         await conn.OpenAsync(ct);
         return conn;
     }

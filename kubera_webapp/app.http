@@ -1,0 +1,6 @@
+# For more info on HTTP files go to https://aka.ms/vs/httpfile
+POST {{HostAdress}}/financial/start-process/2026-01-07
+
+###
+GET {{HostAdress}}/broker/1
+###

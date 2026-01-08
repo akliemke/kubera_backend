@@ -6,7 +6,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // add appsettings configuration file to the configuration sources
 
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+var connectionString = builder.Configuration.GetConnectionString("Default");
 
 if (string.IsNullOrEmpty(connectionString))
 {

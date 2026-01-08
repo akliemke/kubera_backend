@@ -17,11 +17,11 @@ public static class BrokerController
             return Results.Ok(brokers);
         });
 
-        brokerGroup.MapGet("/{id}", async (string id, BrokerRepository brokerRepository, CancellationToken cts) =>
+        brokerGroup.MapGet("/{id}", async (long id, BrokerRepository brokerRepository, CancellationToken cts) =>
         {
             var brokers = await brokerRepository.GetAllAsync(cts);
-            var broker = brokers.Where( broker => broker.Id == Guid.Parse(id)).FirstOrDefault();
-            return Results.Ok(brokers);
+            var broker = brokers.Where( broker => broker.Id == id).FirstOrDefault();
+            return Results.Ok(broker);
         });
 
         brokerGroup.MapPost("/", ([FromBody] BrokerModel broker) =>

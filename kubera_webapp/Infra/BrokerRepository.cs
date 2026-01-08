@@ -19,7 +19,7 @@ public class BrokerRepository
 
     public async Task<IEnumerable<BrokerModel>> GetAllAsync(CancellationToken cts)
     {
-        var sql = "SELECT * FROM brokers";
+        var sql = "SELECT * FROM management.brokers";
         using var conn = await _connectionFactory.CreateOpenConnectionAsync(cts);
         var brokers = await conn.QueryAsync<BrokerModel>(sql);
         _brokers = new ConcurrentBag<BrokerModel>(brokers);
@@ -30,7 +30,6 @@ public class BrokerRepository
     {
         var sql = @"INSERT INTO brokers (Id, Nome, Email)
                     VALUES (@Id, @Nome, @Email)";
-        cliente.Id = Guid.NewGuid();
         using var conn = await _connectionFactory.CreateOpenConnectionAsync(cts);
         await conn.ExecuteAsync(sql, cliente);
         return cliente;

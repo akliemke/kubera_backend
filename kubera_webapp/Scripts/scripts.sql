@@ -11,6 +11,6 @@ CREATE TABLE management.brokers (
 	nickname varchar NOT NULL,
 	"document" varchar NULL,
 	contract_date date NOT NULL,
-	status varchar NOT NULL,
+	status bool DEFAULT true NOT NULL,
 	CONSTRAINT brokers_pk PRIMARY KEY (id)
 );

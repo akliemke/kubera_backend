@@ -2,7 +2,7 @@
 
 public class BrokerModel
 {
-    public Guid Id { get; set; }
+    public long Id { get; set; }
     public int Code { get; set; }
     public required string Name { get; set; }
     public required List<string> Contacts { get; set; }

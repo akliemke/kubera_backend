@@ -1,4 +1,7 @@
-﻿namespace kubera_webapp.Controllers;
+﻿using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http.HttpResults;
+
+namespace kubera_webapp.Controllers;
 
 
 public static class FinancialController
@@ -11,8 +14,12 @@ public static class FinancialController
             return "Saldo atual: R$ 10.000,00";
         });
 
-        financialGroup.MapPost("/start-process/{day}", (string day) => { 
+        financialGroup.MapPost("/start-process/{day}", (string day, CancellationToken cts) =>
+        {
+            if (!DateTime.TryParse(day, out DateTime businessDate))
+                return Results.BadRequest();
 
+            return Results.Ok(businessDate);
         });
         return financialGroup;
     }
