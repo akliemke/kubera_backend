@@ -1,32 +1,24 @@
-﻿using FinancialEngineCore.Model;
+﻿using Dapper;
+using FinancialEngineCore.Model;
+using KuberaWebApp.Infra;
 
 namespace FinancialEngineCore.Infra;
 public class BillingRepository
 {
-    public BillingRepository()
+    private DbConnectionFactory _dbConnectionFactory;
+
+    public BillingRepository(DbConnectionFactory sqlConnectionFactory)
     {
+        _dbConnectionFactory = sqlConnectionFactory;
 
     }
 
-    public List<ProcessBilling> GetAll()
+    public async Task<List<ProcessBilling>> GetAll(CancellationToken ct)
     {
-        return new List<ProcessBilling>
-        {
-            new ProcessBilling
-            {
-                ProcessId = 1,
-                ProcessDate = DateTime.UtcNow,
-                Status = "Completed",
-                ProcessBroker = "BrokerA"
-            },
-            new ProcessBilling
-            {
-                ProcessId = 2,
-                ProcessDate = DateTime.UtcNow.AddDays(-1),
-                Status = "Pending",
-                ProcessBroker = "BrokerB"
-            }
-        };
+        var sql = "SELECT * FROM management.process_billing";
+        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(ct);
+        var billings = await conn.QueryAsync<ProcessBilling>(sql);
+        return new List<ProcessBilling>(billings);
     }
 
     public void Save(ProcessBilling processBilling)

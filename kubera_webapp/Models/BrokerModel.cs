@@ -1,4 +1,4 @@
-﻿namespace kubera_webapp.Models;
+﻿namespace KuberaWebApp.Models;
 
 public class BrokerModel
 {

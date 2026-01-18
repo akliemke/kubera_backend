@@ -1,9 +1,8 @@
-﻿using kubera_webapp.Infra;
-using kubera_webapp.Models;
-using Microsoft.AspNetCore.Http.HttpResults;
+﻿using FinancialEngineCore.Infra;
+using KuberaWebApp.Models;
 using Microsoft.AspNetCore.Mvc;
 
-namespace kubera_webapp.Controllers;
+namespace KuberaWebApp.Controllers;
 
 public static class BrokerController
 {

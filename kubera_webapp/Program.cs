@@ -1,6 +1,7 @@
-using kubera_webapp.Controllers;
-using kubera_webapp.Infra;
-using Microsoft.EntityFrameworkCore;
+using FinancialEngineCore;
+using FinancialEngineCore.Infra;
+using KuberaWebApp.Controllers;
+using KuberaWebApp.Infra;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,9 +24,11 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddSingleton<IConfiguration>(builder.Configuration);
-builder.Services.AddSingleton<IDbConnectionFactory, SqlConnectionFactory>();
+builder.Services.AddSingleton<DbConnectionFactory>();
 builder.Services.AddSingleton<BrokerRepository>();
 var app = builder.Build();
+builder.Services.AddHostedService<BillingWorker>();
+
 app.UseCors("AllowAngular");
 
 app.MapReportEndpoints();

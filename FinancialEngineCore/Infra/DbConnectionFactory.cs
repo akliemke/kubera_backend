@@ -1,18 +1,9 @@
 ﻿using Npgsql;
 using System.Data;
 
-namespace kubera_webapp.Infra;
+namespace KuberaWebApp.Infra;
 
-public class DbConnectionFactory
-{
-}
-
-public interface IDbConnectionFactory
-{
-    Task<IDbConnection> CreateOpenConnectionAsync(CancellationToken ct);
-}
-
-public sealed class SqlConnectionFactory(IConfiguration config) : IDbConnectionFactory
+public sealed class DbConnectionFactory(IConfiguration config)
 {
     private readonly string _cs = config.GetConnectionString("Default")
         ?? throw new InvalidOperationException("ConnectionString 'Default' não configurada.");

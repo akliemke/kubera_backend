@@ -1,4 +1,4 @@
-﻿namespace kubera_webapp.Controllers;
+﻿namespace KuberaWebApp.Controllers;
 
 public static class ReportController
 {

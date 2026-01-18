@@ -1,7 +1,7 @@
 ﻿using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http.HttpResults;
 
-namespace kubera_webapp.Controllers;
+namespace KuberaWebApp.Controllers;
 
 
 public static class FinancialController

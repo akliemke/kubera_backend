@@ -1,18 +1,17 @@
 ﻿using Dapper;
-using kubera_webapp.Models;
-using Npgsql;
+using FinancialEngineCore.Models;
+using KuberaWebApp.Infra;
 using System.Collections.Concurrent;
-using System.Data;
 
-namespace kubera_webapp.Infra;
+namespace FinancialEngineCore.Infra;
 
 public class BrokerRepository
 {
-    private readonly IDbConnectionFactory _connectionFactory;
+    private readonly DbConnectionFactory _connectionFactory;
     private ConcurrentBag<BrokerModel> _brokers;
     public readonly ConcurrentDictionary<string, BrokerModel> BrokerByCode;
 
-    public BrokerRepository(IDbConnectionFactory connectionFactory)
+    public BrokerRepository(DbConnectionFactory connectionFactory)
     {
         _connectionFactory = connectionFactory;
     }

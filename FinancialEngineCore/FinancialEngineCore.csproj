@@ -6,10 +6,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>dotnet-FinancialEngineCore-f8c54eff-17dd-49f9-bd29-ab03aa3eec5c</UserSecretsId>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
-    <DockerfileContext>..\kubera_webapp</DockerfileContext>
+    <DockerfileContext>..\KuberaWebApp</DockerfileContext>
+    <OutputType>Library</OutputType>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Dapper" Version="2.1.66" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.11" />
+    <PackageReference Include="Npgsql" Version="10.0.1" />
   </ItemGroup>
 </Project>
