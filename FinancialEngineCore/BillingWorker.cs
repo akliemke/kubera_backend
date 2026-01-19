@@ -5,11 +5,12 @@ namespace FinancialEngineCore;
 
 public class BillingWorker : BackgroundService
 {
-    private readonly BillingRepository _billingRepository;
+    private readonly ProcessBillingRepository _billingRepository;
     private readonly OrdersRepository _orderRepository;
     private readonly ILogger<BillingWorker> _logger;
+    private FeeBracketRepository _feeBracketRepository;
 
-    public BillingWorker(ILogger<BillingWorker> logger, BillingRepository billingRepository, OrdersRepository orderRepository)
+    public BillingWorker(ILogger<BillingWorker> logger, ProcessBillingRepository billingRepository, OrdersRepository orderRepository)
     {
         _billingRepository = billingRepository;
         _orderRepository = orderRepository;
@@ -36,8 +37,9 @@ public class BillingWorker : BackgroundService
         foreach (var billing in billings)
         {
             var orders = await _orderRepository.GetOrders(billing.ProcessDate.ToString("yyyy-MM-dd"), stoppingToken);
-            
+
             // get faixas
+            var brackets = await _feeBracketRepository.GetAll(stoppingToken);
             // get past calcs
             // calculate
             // insert records to track calcs
