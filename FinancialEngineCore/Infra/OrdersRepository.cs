@@ -2,6 +2,7 @@
 using FinancialEngineCore.Model;
 
 namespace FinancialEngineCore.Infra;
+
 public class OrdersRepository
 {
     private readonly DbConnectionFactory _dbConnectionFactory;
@@ -9,16 +10,13 @@ public class OrdersRepository
     public OrdersRepository(DbConnectionFactory dbConnectionFactory)
     {
         _dbConnectionFactory = dbConnectionFactory;
-        
     }
 
-
-    public async Task<List<Order>> GetOrders(string businessDate, CancellationToken cancellationToken)
+    public async Task<List<Order>> GetOrdersAsync(string businessDate, CancellationToken cancellationToken)
     {
-        var sql = "SELECT * FROM history.orders WHERE businessDate = @BusinessDate";
+        const string sql = "SELECT * FROM history.orders WHERE businessDate = @BusinessDate";
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
         var orders = await conn.QueryAsync<Order>(sql, new { BusinessDate = businessDate });
-
         return orders.ToList();
     }
 }

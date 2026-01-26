@@ -2,42 +2,46 @@
 using FinancialEngineCore.Model;
 
 namespace FinancialEngineCore.Infra;
+
 public class ProcessBillingRepository
 {
-    private DbConnectionFactory _dbConnectionFactory;
+    private readonly DbConnectionFactory _dbConnectionFactory;
 
-    public ProcessBillingRepository(DbConnectionFactory sqlConnectionFactory)
+    public ProcessBillingRepository(DbConnectionFactory dbConnectionFactory)
     {
-        _dbConnectionFactory = sqlConnectionFactory;
-
+        _dbConnectionFactory = dbConnectionFactory;
     }
 
-    public async Task<List<ProcessBilling>> GetAll(CancellationToken ct)
+    public async Task<List<ProcessBilling>> GetAllAsync(CancellationToken cancellationToken)
     {
-        var sql = "SELECT * FROM management.process_billing";
-        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(ct);
+        const string sql = "SELECT * FROM management.process_billing";
+        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
         var billings = await conn.QueryAsync<ProcessBilling>(sql);
-        return new List<ProcessBilling>(billings);
+        return billings.ToList();
     }
 
-    public void Save(ProcessBilling processBilling)
+    public async Task<ProcessBilling?> GetByIdAsync(int id, CancellationToken cancellationToken)
     {
-        // Simulate saving the ProcessBilling record
+        const string sql = "SELECT * FROM management.process_billing WHERE ProcessId = @Id";
+        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
+        var billing = await conn.QueryFirstOrDefaultAsync<ProcessBilling>(sql, new { Id = id });
+        return billing;
     }
 
-    public void Update(ProcessBilling processBilling)
+    public async Task SaveAsync(ProcessBilling processBilling, CancellationToken cancellationToken)
     {
-        // Simulate updating the ProcessBilling record
+        const string sql = @"INSERT INTO management.process_billing (ProcessId, ProcessDate, Status, ProcessBroker)
+                             VALUES (@ProcessId, @ProcessDate, @Status, @ProcessBroker)";
+        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
+        await conn.ExecuteAsync(sql, processBilling);
     }
 
-    public ProcessBilling GetById(int id)
+    public async Task UpdateAsync(ProcessBilling processBilling, CancellationToken cancellationToken)
     {
-        return new ProcessBilling
-        {
-            ProcessId = 2,
-            ProcessDate = DateTime.UtcNow.AddDays(-1),
-            Status = "Pending",
-            ProcessBroker = "BrokerB"
-        };
+        const string sql = @"UPDATE management.process_billing
+                             SET ProcessDate = @ProcessDate, Status = @Status, ProcessBroker = @ProcessBroker
+                             WHERE ProcessId = @ProcessId";
+        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
+        await conn.ExecuteAsync(sql, processBilling);
     }
 }

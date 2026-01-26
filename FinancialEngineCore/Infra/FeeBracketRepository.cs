@@ -2,29 +2,30 @@
 using FinancialEngineCore.Model;
 
 namespace FinancialEngineCore.Infra;
+
 public class FeeBracketRepository
 {
     private readonly DbConnectionFactory _dbConnectionFactory;
 
     public FeeBracketRepository(DbConnectionFactory connectionFactory)
     {
-        _dbConnectionFactory = connectionFactory; 
+        _dbConnectionFactory = connectionFactory;
     }
 
-    public async Task<IEnumerable<FeeBracket>> GetFeeBracketsByBrokerAsync(int brokerId, CancellationToken cts)
+    public async Task<IEnumerable<FeeBracket>> GetByBrokerAsync(int brokerId, CancellationToken cancellationToken)
     {
-        var sql = @"SELECT * FROM financial_engine.fee_brackets 
-                    WHERE Broker = @BrokerId AND IsActive = TRUE
-                    ORDER BY NotionalFrom ASC";
-        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cts);
+        const string sql = @"SELECT * FROM financial_engine.fee_brackets
+                             WHERE Broker = @BrokerId AND IsActive = TRUE
+                             ORDER BY NotionalFrom ASC";
+        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
         var feeBrackets = await conn.QueryAsync<FeeBracket>(sql, new { BrokerId = brokerId });
         return feeBrackets;
     }
 
-    public async Task<IEnumerable<FeeBracket>> GetAllAsync(CancellationToken cts)
+    public async Task<IEnumerable<FeeBracket>> GetAllAsync(CancellationToken cancellationToken)
     {
-        var sql = "SELECT * FROM financial_engine.fee_brackets WHERE IsActive = TRUE";
-        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cts);
+        const string sql = "SELECT * FROM financial_engine.fee_brackets WHERE IsActive = TRUE";
+        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
         var feeBrackets = await conn.QueryAsync<FeeBracket>(sql);
         return feeBrackets;
     }

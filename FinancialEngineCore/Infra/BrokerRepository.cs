@@ -1,42 +1,42 @@
 ﻿using Dapper;
-using FinancialEngineCore.Models;
-using System.Collections.Concurrent;
+using FinancialEngineCore.Model;
 
 namespace FinancialEngineCore.Infra;
 
 public class BrokerRepository
 {
     private readonly DbConnectionFactory _connectionFactory;
-    public ConcurrentBag<BrokerModel> _brokers = new();
-    public readonly ConcurrentDictionary<string, BrokerModel> BrokerByCode = new();
 
     public BrokerRepository(DbConnectionFactory connectionFactory)
     {
         _connectionFactory = connectionFactory;
     }
 
-    public async Task<IEnumerable<BrokerModel>> GetAllAsync(CancellationToken cts)
+    public async Task<IEnumerable<BrokerModel>> GetAllAsync(CancellationToken cancellationToken)
     {
-        var sql = "SELECT * FROM management.brokers";
-        using var conn = await _connectionFactory.CreateOpenConnectionAsync(cts);
+        const string sql = "SELECT * FROM management.brokers";
+        using var conn = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
         var brokers = await conn.QueryAsync<BrokerModel>(sql);
-        _brokers = new ConcurrentBag<BrokerModel>(brokers);
-        return _brokers;
+        return brokers;
     }
 
-    public async Task<BrokerModel> CreateAsync(BrokerModel cliente, CancellationToken cts)
+    public async Task<BrokerModel> CreateAsync(BrokerModel broker, CancellationToken cancellationToken)
     {
-        var sql = @"INSERT INTO management.brokers (Id, Nome, Email)
-                    VALUES (@Id, @Nome, @Email)";
-        using var conn = await _connectionFactory.CreateOpenConnectionAsync(cts);
-        await conn.ExecuteAsync(sql, cliente);
-        return cliente;
+        const string sql = @"INSERT INTO management.brokers (Id, Name, Document, Code, ContractDate, Status, BillingCurrency, Contacts)
+                             VALUES (@Id, @Name, @Document, @Code, @ContractDate, @Status, @BillingCurrency, @Contacts)";
+        using var conn = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
+        await conn.ExecuteAsync(sql, broker);
+        return broker;
     }
 
-    public async Task UpdateBrokerAsync(BrokerModel broker, CancellationToken cts)
+    public async Task UpdateAsync(BrokerModel broker, CancellationToken cancellationToken)
     {
-        var sql = @"UPDATE management.brokers SET Nome = @Nome, Email = @Email WHERE Id = @Id";
-        using var conn = await _connectionFactory.CreateOpenConnectionAsync(cts);
+        const string sql = @"UPDATE management.brokers
+                             SET Name = @Name, Document = @Document, Code = @Code,
+                                 ContractDate = @ContractDate, Status = @Status,
+                                 BillingCurrency = @BillingCurrency, Contacts = @Contacts
+                             WHERE Id = @Id";
+        using var conn = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
         await conn.ExecuteAsync(sql, broker);
     }
 }

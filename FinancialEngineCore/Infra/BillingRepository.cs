@@ -1,10 +1,11 @@
 ﻿namespace FinancialEngineCore.Infra;
+
 public class BillingRepository
 {
-    private DbConnectionFactory _dbConnectionFactory;
+    private readonly DbConnectionFactory _dbConnectionFactory;
 
     public BillingRepository(DbConnectionFactory connectionFactory)
     {
-        _dbConnectionFactory = connectionFactory; 
+        _dbConnectionFactory = connectionFactory;
     }
 }

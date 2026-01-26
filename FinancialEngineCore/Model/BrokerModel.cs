@@ -1,4 +1,4 @@
-﻿namespace FinancialEngineCore.Models;
+﻿namespace FinancialEngineCore.Model;
 
 public class BrokerModel
 {

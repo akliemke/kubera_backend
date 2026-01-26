@@ -7,13 +7,18 @@ public class BillingWorker : BackgroundService
 {
     private readonly ProcessBillingRepository _billingRepository;
     private readonly OrdersRepository _orderRepository;
+    private readonly FeeBracketRepository _feeBracketRepository;
     private readonly ILogger<BillingWorker> _logger;
-    private FeeBracketRepository _feeBracketRepository;
 
-    public BillingWorker(ILogger<BillingWorker> logger, ProcessBillingRepository billingRepository, OrdersRepository orderRepository)
+    public BillingWorker(
+        ILogger<BillingWorker> logger,
+        ProcessBillingRepository billingRepository,
+        OrdersRepository orderRepository,
+        FeeBracketRepository feeBracketRepository)
     {
         _billingRepository = billingRepository;
         _orderRepository = orderRepository;
+        _feeBracketRepository = feeBracketRepository;
         _logger = logger;
     }
 
@@ -23,7 +28,7 @@ public class BillingWorker : BackgroundService
         {
             if (_logger.IsEnabled(LogLevel.Information))
             {
-                var billingsToProcess = await _billingRepository.GetAll(stoppingToken);
+                var billingsToProcess = await _billingRepository.GetAllAsync(stoppingToken);
                 await ProcessBillingRecords(billingsToProcess, stoppingToken);
                 _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
             }
@@ -36,7 +41,7 @@ public class BillingWorker : BackgroundService
     {
         foreach (var billing in billings)
         {
-            var orders = await _orderRepository.GetOrders(billing.ProcessDate.ToString("yyyy-MM-dd"), stoppingToken);
+            var orders = await _orderRepository.GetOrdersAsync(billing.ProcessDate.ToString("yyyy-MM-dd"), stoppingToken);
 
             // get faixas
             var brackets = await _feeBracketRepository.GetAllAsync(stoppingToken);
@@ -49,7 +54,7 @@ public class BillingWorker : BackgroundService
 
             // Simulate processing logic
             billing.Status = "Processed";
-            _billingRepository.Update(billing);
+            await _billingRepository.UpdateAsync(billing, stoppingToken);
             _logger.LogInformation("Processed billing record with ID: {id}", billing.ProcessId);
         }
 
