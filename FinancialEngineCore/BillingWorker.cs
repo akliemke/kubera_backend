@@ -39,7 +39,7 @@ public class BillingWorker : BackgroundService
             var orders = await _orderRepository.GetOrders(billing.ProcessDate.ToString("yyyy-MM-dd"), stoppingToken);
 
             // get faixas
-            var brackets = await _feeBracketRepository.GetAll(stoppingToken);
+            var brackets = await _feeBracketRepository.GetAllAsync(stoppingToken);
             // get past calcs
             // calculate
             // insert records to track calcs

@@ -1,6 +1,5 @@
 ﻿using Dapper;
 using FinancialEngineCore.Model;
-using KuberaWebApp.Infra;
 
 namespace FinancialEngineCore.Infra;
 public class ProcessBillingRepository

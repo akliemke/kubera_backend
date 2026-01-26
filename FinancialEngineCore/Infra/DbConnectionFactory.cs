@@ -1,7 +1,7 @@
 ﻿using Npgsql;
 using System.Data;
 
-namespace KuberaWebApp.Infra;
+namespace FinancialEngineCore.Infra;
 
 public sealed class DbConnectionFactory(IConfiguration config)
 {

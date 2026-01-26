@@ -1,6 +1,4 @@
-﻿using KuberaWebApp.Infra;
-
-namespace FinancialEngineCore.Infra;
+﻿namespace FinancialEngineCore.Infra;
 public class BillingRepository
 {
     private DbConnectionFactory _dbConnectionFactory;

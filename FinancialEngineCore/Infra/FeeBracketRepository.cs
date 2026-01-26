@@ -1,11 +1,10 @@
 ﻿using Dapper;
 using FinancialEngineCore.Model;
-using KuberaWebApp.Infra;
 
 namespace FinancialEngineCore.Infra;
 public class FeeBracketRepository
 {
-    private DbConnectionFactory _dbConnectionFactory;
+    private readonly DbConnectionFactory _dbConnectionFactory;
 
     public FeeBracketRepository(DbConnectionFactory connectionFactory)
     {
@@ -22,7 +21,7 @@ public class FeeBracketRepository
         return feeBrackets;
     }
 
-    public async Task<IEnumerable<FeeBracket>> GetAll(CancellationToken cts)
+    public async Task<IEnumerable<FeeBracket>> GetAllAsync(CancellationToken cts)
     {
         var sql = "SELECT * FROM financial_engine.fee_brackets WHERE IsActive = TRUE";
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cts);

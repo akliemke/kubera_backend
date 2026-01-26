@@ -1,25 +1,24 @@
 ﻿using Dapper;
 using FinancialEngineCore.Model;
-using KuberaWebApp.Infra;
 
 namespace FinancialEngineCore.Infra;
 public class OrdersRepository
 {
-    private DbConnectionFactory _dbConnectionFactory;
+    private readonly DbConnectionFactory _dbConnectionFactory;
 
-    public OrdersRepository(DbConnectionFactory dbConnectiondFactory)
+    public OrdersRepository(DbConnectionFactory dbConnectionFactory)
     {
-        _dbConnectionFactory = dbConnectiondFactory;
+        _dbConnectionFactory = dbConnectionFactory;
         
     }
 
 
     public async Task<List<Order>> GetOrders(string businessDate, CancellationToken cancellationToken)
     {
-        var sql = "SELECT * FROM history.orders WHERE businessDate = 'date'";
+        var sql = "SELECT * FROM history.orders WHERE businessDate = @BusinessDate";
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
-        var orders = await conn.QueryAsync<Order>(sql);
+        var orders = await conn.QueryAsync<Order>(sql, new { BusinessDate = businessDate });
 
-        return new List<Order>(orders);
+        return orders.ToList();
     }
 }

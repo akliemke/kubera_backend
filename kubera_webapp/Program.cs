@@ -1,7 +1,6 @@
 using FinancialEngineCore;
 using FinancialEngineCore.Infra;
 using KuberaWebApp.Controllers;
-using KuberaWebApp.Infra;
 
 var builder = WebApplication.CreateBuilder(args);
 
