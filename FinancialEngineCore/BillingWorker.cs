@@ -1,63 +1,86 @@
+using FinancialEngineCore.Domain.Services;
 using FinancialEngineCore.Infra;
 using FinancialEngineCore.Model;
 
 namespace FinancialEngineCore;
 
+/// <summary>
+/// Background worker that polls for pending billing jobs and processes them.
+/// Delegates actual processing to IBillingProcessingService.
+/// </summary>
 public class BillingWorker : BackgroundService
 {
-    private readonly ProcessBillingRepository _billingRepository;
-    private readonly OrdersRepository _orderRepository;
-    private readonly FeeBracketRepository _feeBracketRepository;
+    private readonly ProcessBillingRepository _processBillingRepository;
+    private readonly IBillingProcessingService _billingProcessingService;
     private readonly ILogger<BillingWorker> _logger;
+
+    private readonly TimeSpan _pollingInterval = TimeSpan.FromSeconds(1);
+    private readonly TimeSpan _errorRetryDelay = TimeSpan.FromSeconds(5);
 
     public BillingWorker(
         ILogger<BillingWorker> logger,
-        ProcessBillingRepository billingRepository,
-        OrdersRepository orderRepository,
-        FeeBracketRepository feeBracketRepository)
+        ProcessBillingRepository processBillingRepository,
+        IBillingProcessingService billingProcessingService)
     {
-        _billingRepository = billingRepository;
-        _orderRepository = orderRepository;
-        _feeBracketRepository = feeBracketRepository;
         _logger = logger;
+        _processBillingRepository = processBillingRepository;
+        _billingProcessingService = billingProcessingService;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        _logger.LogInformation("BillingWorker starting...");
+
         while (!stoppingToken.IsCancellationRequested)
         {
-            if (_logger.IsEnabled(LogLevel.Information))
+            try
             {
-                var billingsToProcess = await _billingRepository.GetAllAsync(stoppingToken);
-                await ProcessBillingRecords(billingsToProcess, stoppingToken);
-                _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
+                await ProcessPendingBillingsAsync(stoppingToken);
+                await Task.Delay(_pollingInterval, stoppingToken);
             }
-            await Task.Delay(1000, stoppingToken);
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in BillingWorker main loop");
+                await Task.Delay(_errorRetryDelay, stoppingToken);
+            }
+        }
+
+        _logger.LogInformation("BillingWorker stopped.");
+    }
+
+    private async Task ProcessPendingBillingsAsync(CancellationToken ct)
+    {
+        // Try to acquire a single pending billing with lock
+        // Loop until no more pending billings are available
+        while (true)
+        {
+            var billing = await _processBillingRepository.TryAcquireNextAsync(ct);
+            if (billing == null)
+                break;
+
+            await ProcessSingleBillingAsync(billing, ct);
         }
     }
 
-
-    private async Task ProcessBillingRecords(List<ProcessBilling> billings, CancellationToken stoppingToken)
+    private async Task ProcessSingleBillingAsync(ProcessBilling billing, CancellationToken ct)
     {
-        foreach (var billing in billings)
+        try
         {
-            var orders = await _orderRepository.GetOrdersAsync(billing.ProcessDate.ToString("yyyy-MM-dd"), stoppingToken);
+            await _billingProcessingService.ProcessBillingAsync(billing, ct);
 
-            // get faixas
-            var brackets = await _feeBracketRepository.GetAllAsync(stoppingToken);
-            // get past calcs
-            // calculate
-            // insert records to track calcs
-            // finalize
-
-
-
-            // Simulate processing logic
             billing.Status = "Processed";
-            await _billingRepository.UpdateAsync(billing, stoppingToken);
-            _logger.LogInformation("Processed billing record with ID: {id}", billing.ProcessId);
+            await _processBillingRepository.UpdateAsync(billing, ct);
         }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing billing {ProcessId}", billing.ProcessId);
 
-        await Task.CompletedTask;
+            billing.Status = "Error";
+            await _processBillingRepository.UpdateAsync(billing, ct);
+        }
     }
 }

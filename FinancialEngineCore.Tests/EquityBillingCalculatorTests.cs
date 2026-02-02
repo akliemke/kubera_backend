@@ -1,0 +1,236 @@
+using FinancialEngineCore.Domain;
+using FinancialEngineCore.Model;
+
+namespace FinancialEngineCore.Tests;
+
+public class EquityBillingCalculatorTests
+{
+    private static List<EquityFeeBracket> CreateDefaultBrackets()
+    {
+        return new List<EquityFeeBracket>
+        {
+            new() { Id = 1, Broker = 1, NotionalFrom = 0, NotionalTo = 50_000_000, Bps = 0.5m, Cap = 2100, IsActive = true },
+            new() { Id = 2, Broker = 1, NotionalFrom = 50_000_000, NotionalTo = 150_000_000, Bps = 0.45m, Cap = 5200, IsActive = true },
+            new() { Id = 3, Broker = 1, NotionalFrom = 150_000_000, NotionalTo = 500_000_000, Bps = 0.35m, Cap = 15000, IsActive = true },
+            new() { Id = 4, Broker = 1, NotionalFrom = 500_000_000, NotionalTo = null, Bps = 0.30m, Cap = 31000, IsActive = true },
+        };
+    }
+
+    private static Order CreateOrder(decimal qty, decimal price, string trader = "TRADER1")
+    {
+        return new Order
+        {
+            Id = 1,
+            CumQty = qty,
+            AvgPx = price,
+            Symbol = "PETR4",
+            AssetClass = "EQUITY",
+            EnteringTrader = trader,
+            EnteringFirm = "1",
+            Entity = "MESA1",
+            OmsInstance = "OMS1",
+            Side = "BUY",
+            TradeDate = DateTime.Today
+        };
+    }
+
+    [Fact]
+    public void Calculate_SingleOrder_FirstBracket_NoCapHit()
+    {
+        // Arrange: 10M notional, should be charged at 0.5 bps
+        var orders = new List<Order> { CreateOrder(100_000, 100) }; // 10M notional
+        var brackets = CreateDefaultBrackets();
+        var feePerBracket = new Dictionary<long, decimal>();
+
+        // Act
+        var result = EquityBillingCalculator.Calculate(orders, brackets, 0, feePerBracket);
+
+        // Assert: 10M * 0.00005 = 500
+        Assert.Equal(10_000_000m, result.TotalNotional);
+        Assert.Equal(500m, result.TotalFee);
+        Assert.Equal(0m, result.AccumulatedBefore);
+        Assert.Equal(10_000_000m, result.AccumulatedAfter);
+    }
+
+    [Fact]
+    public void Calculate_SingleOrder_FirstBracket_HitsCap()
+    {
+        // Arrange: 50M notional at 0.5 bps = 2500, but CAP is 2100
+        var orders = new List<Order> { CreateOrder(500_000, 100) }; // 50M notional
+        var brackets = CreateDefaultBrackets();
+        var feePerBracket = new Dictionary<long, decimal>();
+
+        // Act
+        var result = EquityBillingCalculator.Calculate(orders, brackets, 0, feePerBracket);
+
+        // Assert: 50M * 0.00005 = 2500 -> CAP 2100
+        Assert.Equal(50_000_000m, result.TotalNotional);
+        Assert.Equal(2100m, result.TotalFee);
+    }
+
+    [Fact]
+    public void Calculate_MultipleBrackets_200M_NoCapHit()
+    {
+        // Arrange: 200M notional crossing 3 brackets
+        // Faixa 1: 50M * 0.00005 = 2500 -> CAP 2100 -> 2100
+        // Faixa 2: 100M * 0.000045 = 4500 (no cap)
+        // Faixa 3: 50M * 0.000035 = 1750 (no cap)
+        // Total: 2100 + 4500 + 1750 = 8350
+        var orders = new List<Order> { CreateOrder(2_000_000, 100) }; // 200M notional
+        var brackets = CreateDefaultBrackets();
+        var feePerBracket = new Dictionary<long, decimal>();
+
+        // Act
+        var result = EquityBillingCalculator.Calculate(orders, brackets, 0, feePerBracket);
+
+        // Assert
+        Assert.Equal(200_000_000m, result.TotalNotional);
+        Assert.Equal(8350m, result.TotalFee);
+    }
+
+    [Fact]
+    public void Calculate_WithAccumulated_PartialFirstBracket()
+    {
+        // Arrange: Already accumulated 40M, now trading 30M more
+        // First bracket has 10M remaining (40M -> 50M), then 20M in second bracket
+        // Faixa 1: 10M * 0.00005 = 500 (no cap yet)
+        // Faixa 2: 20M * 0.000045 = 900
+        // Total: 500 + 900 = 1400
+        var orders = new List<Order> { CreateOrder(300_000, 100) }; // 30M notional
+        var brackets = CreateDefaultBrackets();
+        var feePerBracket = new Dictionary<long, decimal>();
+
+        // Act
+        var result = EquityBillingCalculator.Calculate(orders, brackets, 40_000_000m, feePerBracket);
+
+        // Assert
+        Assert.Equal(30_000_000m, result.TotalNotional);
+        Assert.Equal(40_000_000m, result.AccumulatedBefore);
+        Assert.Equal(70_000_000m, result.AccumulatedAfter);
+        Assert.Equal(1400m, result.TotalFee);
+    }
+
+    [Fact]
+    public void Calculate_WithAccumulated_CapAlreadyPartiallyUsed()
+    {
+        // Arrange: Already accumulated 40M with 2000 fee charged in bracket 1
+        // Now trading 30M more
+        // Faixa 1: 10M * 0.00005 = 500, but CAP 2100 - 2000 = 100 remaining
+        // Faixa 2: 20M * 0.000045 = 900
+        // Total: 100 + 900 = 1000
+        var orders = new List<Order> { CreateOrder(300_000, 100) }; // 30M notional
+        var brackets = CreateDefaultBrackets();
+        var feePerBracket = new Dictionary<long, decimal> { { 1, 2000m } };
+
+        // Act
+        var result = EquityBillingCalculator.Calculate(orders, brackets, 40_000_000m, feePerBracket);
+
+        // Assert
+        Assert.Equal(30_000_000m, result.TotalNotional);
+        Assert.Equal(1000m, result.TotalFee);
+    }
+
+    [Fact]
+    public void Calculate_MultipleOrders_FeeDistributedProportionally()
+    {
+        // Arrange: 2 orders of 5M each = 10M total
+        // Total fee: 10M * 0.00005 = 500
+        // Each order should get 250 (50%)
+        var orders = new List<Order>
+        {
+            CreateOrder(50_000, 100), // 5M
+            CreateOrder(50_000, 100), // 5M
+        };
+        var brackets = CreateDefaultBrackets();
+        var feePerBracket = new Dictionary<long, decimal>();
+
+        // Act
+        var result = EquityBillingCalculator.Calculate(orders, brackets, 0, feePerBracket);
+
+        // Assert
+        Assert.Equal(10_000_000m, result.TotalNotional);
+        Assert.Equal(500m, result.TotalFee);
+        Assert.Equal(2, result.OrderFees.Count);
+        Assert.Equal(250m, result.OrderFees[0].FeeAmount);
+        Assert.Equal(250m, result.OrderFees[1].FeeAmount);
+    }
+
+    [Fact]
+    public void Calculate_MultipleOrders_DifferentSizes_ProportionalDistribution()
+    {
+        // Arrange: 2 orders - 8M and 2M = 10M total
+        // Total fee: 10M * 0.00005 = 500
+        // Order 1 (8M): 80% -> 400
+        // Order 2 (2M): 20% -> 100
+        var orders = new List<Order>
+        {
+            CreateOrder(80_000, 100), // 8M
+            CreateOrder(20_000, 100), // 2M
+        };
+        var brackets = CreateDefaultBrackets();
+        var feePerBracket = new Dictionary<long, decimal>();
+
+        // Act
+        var result = EquityBillingCalculator.Calculate(orders, brackets, 0, feePerBracket);
+
+        // Assert
+        Assert.Equal(10_000_000m, result.TotalNotional);
+        Assert.Equal(500m, result.TotalFee);
+        Assert.Equal(400m, result.OrderFees[0].FeeAmount);
+        Assert.Equal(100m, result.OrderFees[1].FeeAmount);
+    }
+
+    [Fact]
+    public void Calculate_EmptyOrders_ReturnsZero()
+    {
+        // Arrange
+        var orders = new List<Order>();
+        var brackets = CreateDefaultBrackets();
+        var feePerBracket = new Dictionary<long, decimal>();
+
+        // Act
+        var result = EquityBillingCalculator.Calculate(orders, brackets, 0, feePerBracket);
+
+        // Assert
+        Assert.Equal(0m, result.TotalNotional);
+        Assert.Equal(0m, result.TotalFee);
+        Assert.Empty(result.OrderFees);
+    }
+
+    [Fact]
+    public void Calculate_NoBrackets_ReturnsZeroFee()
+    {
+        // Arrange
+        var orders = new List<Order> { CreateOrder(100_000, 100) };
+        var brackets = new List<EquityFeeBracket>();
+        var feePerBracket = new Dictionary<long, decimal>();
+
+        // Act
+        var result = EquityBillingCalculator.Calculate(orders, brackets, 0, feePerBracket);
+
+        // Assert
+        Assert.Equal(10_000_000m, result.TotalNotional);
+        Assert.Equal(0m, result.TotalFee);
+    }
+
+    [Fact]
+    public void Calculate_VeryLargeVolume_CrossesAllBrackets()
+    {
+        // Arrange: 600M notional crossing all 4 brackets
+        // Faixa 1: 50M * 0.00005 = 2500 -> CAP 2100
+        // Faixa 2: 100M * 0.000045 = 4500 -> no cap (cap 5200)
+        // Faixa 3: 350M * 0.000035 = 12250 -> no cap (cap 15000)
+        // Faixa 4: 100M * 0.00003 = 3000 -> no cap (cap 31000)
+        // Total: 2100 + 4500 + 12250 + 3000 = 21850
+        var orders = new List<Order> { CreateOrder(6_000_000, 100) }; // 600M notional
+        var brackets = CreateDefaultBrackets();
+        var feePerBracket = new Dictionary<long, decimal>();
+
+        // Act
+        var result = EquityBillingCalculator.Calculate(orders, brackets, 0, feePerBracket);
+
+        // Assert
+        Assert.Equal(600_000_000m, result.TotalNotional);
+        Assert.Equal(21850m, result.TotalFee);
+    }
+}

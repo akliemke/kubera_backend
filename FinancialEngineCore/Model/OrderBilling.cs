@@ -1,0 +1,32 @@
+namespace FinancialEngineCore.Model;
+
+/// <summary>
+/// Fee calculado por ordem individual (proporcional ao volume/quantidade).
+/// Usado para rastreabilidade da origem do cálculo.
+/// </summary>
+public class OrderBilling
+{
+    public long Id { get; set; }
+
+    /// <summary>ID da ordem original</summary>
+    public long OrderId { get; set; }
+
+    /// <summary>Vínculo com o cálculo diário agregado</summary>
+    public long DailyBillingId { get; set; }
+
+    public int Broker { get; set; }
+    public required string Trader { get; set; }
+    public DateTime TradeDate { get; set; }
+
+    /// <summary>"EQUITY" ou "BMF"</summary>
+    public required string AssetClass { get; set; }
+
+    /// <summary>Volume financeiro da ordem (para EQUITY)</summary>
+    public decimal Notional { get; set; }
+
+    /// <summary>Quantidade de contratos (para BMF)</summary>
+    public decimal Qty { get; set; }
+
+    /// <summary>Fee calculado proporcional: (Notional ou Qty) / Total × FeeTotalDia</summary>
+    public decimal FeeAmount { get; set; }
+}

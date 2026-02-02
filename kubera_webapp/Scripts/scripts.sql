@@ -22,6 +22,14 @@ CREATE TABLE management.billing_process (
 	status varchar NOT NULL,
 	brokers_to_process varchar NOT NULL,
 	process_timestamp timestamp NOT NULL,
+	locked_at timestamp NULL,  -- Timestamp de quando o processamento foi iniciado (para lock)
 	CONSTRAINT billing_process_pk PRIMARY KEY (process_id)
 );
+
+CREATE INDEX idx_billing_process_status ON management.billing_process(status);
+
+-- ============================================
+-- Migration: Adicionar coluna locked_at (se já existir a tabela)
+-- ============================================
+-- ALTER TABLE management.billing_process ADD COLUMN IF NOT EXISTS locked_at timestamp NULL;
 

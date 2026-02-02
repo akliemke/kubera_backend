@@ -1,0 +1,46 @@
+namespace FinancialEngineCore.Model;
+
+/// <summary>
+/// Configuração de cobrança para BMF (futuros).
+/// Cobrança por número de contratos com CAP mensal único.
+/// </summary>
+public class BmfFeeConfig
+{
+    public long Id { get; set; }
+    public int Broker { get; set; }
+
+    /// <summary>
+    /// Se NULL = regra padrão do broker.
+    /// Se preenchido = regra especial 100% custom para este trader.
+    /// </summary>
+    public string? Trader { get; set; }
+
+    public DateTime ValidFrom { get; set; }
+    public DateTime ValidTo { get; set; }
+
+    /// <summary>Valor por contrato Mini (WIN, WDO)</summary>
+    public decimal ValorMini { get; set; }
+
+    /// <summary>Valor por contrato Cheio (IND, DOL)</summary>
+    public decimal ValorCheio { get; set; }
+
+    /// <summary>Valor DI1 para 1º ao 4º vencimento</summary>
+    public decimal DI1Venc1a4 { get; set; }
+
+    /// <summary>Valor DI1 para 5º vencimento</summary>
+    public decimal DI1Venc5 { get; set; }
+
+    /// <summary>Valor DI1 para 6º vencimento</summary>
+    public decimal DI1Venc6 { get; set; }
+
+    /// <summary>Valor DI1 para 7º vencimento</summary>
+    public decimal DI1Venc7 { get; set; }
+
+    /// <summary>Valor DI1 para 8º vencimento em diante</summary>
+    public decimal DI1Venc8Plus { get; set; }
+
+    /// <summary>CAP mensal único (engloba Mini + Cheio + DI1)</summary>
+    public decimal CapMensal { get; set; }
+
+    public bool IsActive { get; set; }
+}
