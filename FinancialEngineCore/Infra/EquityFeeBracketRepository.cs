@@ -74,4 +74,53 @@ public class EquityFeeBracketRepository
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
         return await conn.QueryAsync<EquityFeeBracket>(sql);
     }
+
+    public async Task<EquityFeeBracket?> GetByIdAsync(long id, CancellationToken cancellationToken)
+    {
+        const string sql = "SELECT * FROM financial_engine.equity_fee_brackets WHERE Id = @Id";
+        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
+        return await conn.QueryFirstOrDefaultAsync<EquityFeeBracket>(sql, new { Id = id });
+    }
+
+    public async Task<IEnumerable<EquityFeeBracket>> GetByBrokerAsync(int brokerId, CancellationToken cancellationToken)
+    {
+        const string sql = @"
+            SELECT * FROM financial_engine.equity_fee_brackets
+            WHERE Broker = @BrokerId AND IsActive = TRUE
+            ORDER BY Trader, NotionalFrom ASC";
+        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
+        return await conn.QueryAsync<EquityFeeBracket>(sql, new { BrokerId = brokerId });
+    }
+
+    public async Task<EquityFeeBracket> CreateAsync(EquityFeeBracket bracket, CancellationToken cancellationToken)
+    {
+        const string sql = @"
+            INSERT INTO financial_engine.equity_fee_brackets
+                (Broker, Trader, ValidFrom, ValidTo, NotionalFrom, NotionalTo, Bps, Cap, IsActive)
+            VALUES
+                (@Broker, @Trader, @ValidFrom, @ValidTo, @NotionalFrom, @NotionalTo, @Bps, @Cap, @IsActive)
+            RETURNING *";
+        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
+        return await conn.QuerySingleAsync<EquityFeeBracket>(sql, bracket);
+    }
+
+    public async Task<bool> UpdateAsync(EquityFeeBracket bracket, CancellationToken cancellationToken)
+    {
+        const string sql = @"
+            UPDATE financial_engine.equity_fee_brackets
+            SET Broker = @Broker, Trader = @Trader, ValidFrom = @ValidFrom, ValidTo = @ValidTo,
+                NotionalFrom = @NotionalFrom, NotionalTo = @NotionalTo, Bps = @Bps, Cap = @Cap, IsActive = @IsActive
+            WHERE Id = @Id";
+        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
+        var rows = await conn.ExecuteAsync(sql, bracket);
+        return rows > 0;
+    }
+
+    public async Task<bool> DeactivateAsync(long id, CancellationToken cancellationToken)
+    {
+        const string sql = "UPDATE financial_engine.equity_fee_brackets SET IsActive = FALSE WHERE Id = @Id";
+        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
+        var rows = await conn.ExecuteAsync(sql, new { Id = id });
+        return rows > 0;
+    }
 }

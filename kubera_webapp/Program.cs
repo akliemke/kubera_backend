@@ -61,6 +61,8 @@ app.UseCors("AllowAngular");
 app.MapReportEndpoints();
 app.MapBrokerEndpoints();
 app.MapFinancialEndpoints();
+app.MapEquityFeeBracketEndpoints();
+app.MapBmfFeeConfigEndpoints();
 
 app.MapGet("/", () => "Hello World!");
 
