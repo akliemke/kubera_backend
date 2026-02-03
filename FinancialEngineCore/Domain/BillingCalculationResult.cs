@@ -30,6 +30,9 @@ public class BillingCalculationResult
 
     /// <summary>Fee distribuído proporcionalmente por ordem</summary>
     public required List<OrderFeeResult> OrderFees { get; init; }
+
+    /// <summary>Fee cobrado por faixa (apenas EQUITY)</summary>
+    public List<BracketFeeResult> BracketFees { get; init; } = new();
 }
 
 /// <summary>
@@ -41,4 +44,17 @@ public class OrderFeeResult
     public decimal Notional { get; init; }
     public decimal Qty { get; init; }
     public decimal FeeAmount { get; init; }
+}
+
+/// <summary>
+/// Fee calculado para uma faixa específica (EQUITY).
+/// </summary>
+public class BracketFeeResult
+{
+    public long BracketId { get; init; }
+    public decimal NotionalInBracket { get; init; }
+    public decimal CalculatedFee { get; init; }
+    public decimal ChargedFee { get; init; }
+    public decimal AccumulatedFeeBefore { get; init; }
+    public decimal BracketCap { get; init; }
 }

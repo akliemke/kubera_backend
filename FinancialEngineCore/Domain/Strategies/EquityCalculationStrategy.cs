@@ -11,15 +11,18 @@ public class EquityCalculationStrategy : ICalculationStrategy
 {
     private readonly EquityFeeBracketRepository _bracketRepository;
     private readonly DailyBillingRepository _dailyBillingRepository;
+    private readonly BracketFeeTrackingRepository _bracketFeeTrackingRepository;
 
     public string AssetClass => "EQUITY";
 
     public EquityCalculationStrategy(
         EquityFeeBracketRepository bracketRepository,
-        DailyBillingRepository dailyBillingRepository)
+        DailyBillingRepository dailyBillingRepository,
+        BracketFeeTrackingRepository bracketFeeTrackingRepository)
     {
         _bracketRepository = bracketRepository;
         _dailyBillingRepository = dailyBillingRepository;
+        _bracketFeeTrackingRepository = bracketFeeTrackingRepository;
     }
 
     public async Task<BillingCalculationResult> CalculateAsync(
@@ -38,8 +41,9 @@ public class EquityCalculationStrategy : ICalculationStrategy
         var accumulatedBefore = await _dailyBillingRepository.GetMonthAccumulatedAsync(
             brokerId, trader, AssetClass, tradeDate, ct);
 
-        // TODO: Implement per-bracket fee tracking for CAPs
-        var feeChargedPerBracket = new Dictionary<long, decimal>();
+        // Get fee already charged per bracket in the month (for CAP enforcement)
+        var feeChargedPerBracket = await _bracketFeeTrackingRepository.GetMonthFeePerBracketAsync(
+            brokerId, trader, tradeDate, ct);
 
         return EquityBillingCalculator.Calculate(
             orders,

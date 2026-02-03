@@ -109,6 +109,25 @@ CREATE INDEX idx_order_billing_date ON financial_engine.order_billing(Broker, Tr
 COMMENT ON TABLE financial_engine.order_billing IS 'Fee calculado por ordem individual (proporcional ao volume/quantidade)';
 
 -- ============================================
+-- Bracket Fee Tracking (fee por faixa EQUITY)
+-- ============================================
+CREATE TABLE financial_engine.bracket_fee_tracking (
+    Id BIGSERIAL PRIMARY KEY,
+    DailyBillingId BIGINT NOT NULL REFERENCES financial_engine.daily_billing(Id) ON DELETE CASCADE,
+    BracketId BIGINT NOT NULL REFERENCES financial_engine.equity_fee_brackets(Id),
+    NotionalInBracket DECIMAL(18,2) NOT NULL,  -- Volume que caiu nesta faixa
+    CalculatedFee DECIMAL(18,4) NOT NULL,  -- Fee calculado antes do CAP
+    ChargedFee DECIMAL(18,4) NOT NULL,  -- Fee efetivamente cobrado (após CAP)
+    AccumulatedFeeBefore DECIMAL(18,4) NOT NULL,  -- Fee acumulado na faixa antes deste dia
+    BracketCap DECIMAL(18,2) NOT NULL  -- CAP da faixa no momento do cálculo
+);
+
+CREATE INDEX idx_bracket_fee_tracking_daily ON financial_engine.bracket_fee_tracking(DailyBillingId);
+CREATE INDEX idx_bracket_fee_tracking_bracket ON financial_engine.bracket_fee_tracking(BracketId);
+
+COMMENT ON TABLE financial_engine.bracket_fee_tracking IS 'Tracking do fee cobrado em cada faixa EQUITY por dia - permite aplicar CAPs por faixa corretamente';
+
+-- ============================================
 -- Views para agregações
 -- ============================================
 

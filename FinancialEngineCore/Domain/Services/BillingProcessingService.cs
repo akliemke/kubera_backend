@@ -14,6 +14,7 @@ public class BillingProcessingService : IBillingProcessingService
     private readonly OrdersRepository _orderRepository;
     private readonly DailyBillingRepository _dailyBillingRepository;
     private readonly OrderBillingRepository _orderBillingRepository;
+    private readonly BracketFeeTrackingRepository _bracketFeeTrackingRepository;
     private readonly CalculationStrategyRegistry _strategyRegistry;
     private readonly ILogger<BillingProcessingService> _logger;
 
@@ -21,12 +22,14 @@ public class BillingProcessingService : IBillingProcessingService
         OrdersRepository orderRepository,
         DailyBillingRepository dailyBillingRepository,
         OrderBillingRepository orderBillingRepository,
+        BracketFeeTrackingRepository bracketFeeTrackingRepository,
         CalculationStrategyRegistry strategyRegistry,
         ILogger<BillingProcessingService> logger)
     {
         _orderRepository = orderRepository;
         _dailyBillingRepository = dailyBillingRepository;
         _orderBillingRepository = orderBillingRepository;
+        _bracketFeeTrackingRepository = bracketFeeTrackingRepository;
         _strategyRegistry = strategyRegistry;
         _logger = logger;
     }
@@ -61,7 +64,8 @@ public class BillingProcessingService : IBillingProcessingService
             return;
         }
 
-        // Delete existing billing for reprocessing
+        // Delete existing billing for reprocessing (order matters due to FK constraints)
+        await _bracketFeeTrackingRepository.DeleteByDateAsync(brokerId, tradeDate, ct);
         await _orderBillingRepository.DeleteByDateAsync(brokerId, tradeDate, ct);
         await _dailyBillingRepository.DeleteByDateAsync(brokerId, tradeDate, ct);
 
@@ -130,6 +134,7 @@ public class BillingProcessingService : IBillingProcessingService
 
         var dailyBillingId = await _dailyBillingRepository.InsertAsync(dailyBilling, ct);
 
+        // Persist order fees
         var orderBillings = result.OrderFees.Select(of => new OrderBilling
         {
             OrderId = of.OrderId,
@@ -145,9 +150,26 @@ public class BillingProcessingService : IBillingProcessingService
 
         await _orderBillingRepository.InsertBatchAsync(orderBillings, ct);
 
+        // Persist bracket fee tracking (EQUITY only)
+        if (result.BracketFees.Count > 0)
+        {
+            var bracketTrackings = result.BracketFees.Select(bf => new BracketFeeTracking
+            {
+                DailyBillingId = dailyBillingId,
+                BracketId = bf.BracketId,
+                NotionalInBracket = bf.NotionalInBracket,
+                CalculatedFee = bf.CalculatedFee,
+                ChargedFee = bf.ChargedFee,
+                AccumulatedFeeBefore = bf.AccumulatedFeeBefore,
+                BracketCap = bf.BracketCap
+            }).ToList();
+
+            await _bracketFeeTrackingRepository.InsertBatchAsync(bracketTrackings, ct);
+        }
+
         _logger.LogDebug(
-            "Persisted billing for {Trader}/{Broker}/{Date}/{AssetClass}: Fee={Fee}",
-            result.Trader, result.Broker, result.TradeDate, result.AssetClass, result.TotalFee);
+            "Persisted billing for {Trader}/{Broker}/{Date}/{AssetClass}: Fee={Fee}, Brackets={BracketCount}",
+            result.Trader, result.Broker, result.TradeDate, result.AssetClass, result.TotalFee, result.BracketFees.Count);
     }
 
     private static List<int> ParseBrokerIds(string processBroker)

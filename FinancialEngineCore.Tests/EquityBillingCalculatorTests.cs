@@ -233,4 +233,98 @@ public class EquityBillingCalculatorTests
         Assert.Equal(600_000_000m, result.TotalNotional);
         Assert.Equal(21850m, result.TotalFee);
     }
+
+    [Fact]
+    public void Calculate_BracketFees_ReturnedCorrectly()
+    {
+        // Arrange: 200M notional crossing 3 brackets
+        var orders = new List<Order> { CreateOrder(2_000_000, 100) }; // 200M notional
+        var brackets = CreateDefaultBrackets();
+        var feePerBracket = new Dictionary<long, decimal>();
+
+        // Act
+        var result = EquityBillingCalculator.Calculate(orders, brackets, 0, feePerBracket);
+
+        // Assert: 3 faixas foram usadas
+        Assert.Equal(3, result.BracketFees.Count);
+
+        // Faixa 1: 50M, calculated 2500, charged 2100 (CAP)
+        var bracket1 = result.BracketFees.First(b => b.BracketId == 1);
+        Assert.Equal(50_000_000m, bracket1.NotionalInBracket);
+        Assert.Equal(2500m, bracket1.CalculatedFee);
+        Assert.Equal(2100m, bracket1.ChargedFee);
+        Assert.Equal(2100m, bracket1.BracketCap);
+
+        // Faixa 2: 100M, calculated 4500, charged 4500
+        var bracket2 = result.BracketFees.First(b => b.BracketId == 2);
+        Assert.Equal(100_000_000m, bracket2.NotionalInBracket);
+        Assert.Equal(4500m, bracket2.CalculatedFee);
+        Assert.Equal(4500m, bracket2.ChargedFee);
+
+        // Faixa 3: 50M, calculated 1750, charged 1750
+        var bracket3 = result.BracketFees.First(b => b.BracketId == 3);
+        Assert.Equal(50_000_000m, bracket3.NotionalInBracket);
+        Assert.Equal(1750m, bracket3.CalculatedFee);
+        Assert.Equal(1750m, bracket3.ChargedFee);
+    }
+
+    [Fact]
+    public void Calculate_BracketFees_WithAccumulatedFee_CapAppliedCorrectly()
+    {
+        // Arrange: Already charged 2000 in bracket 1, now trading more
+        var orders = new List<Order> { CreateOrder(300_000, 100) }; // 30M notional
+        var brackets = CreateDefaultBrackets();
+        var feePerBracket = new Dictionary<long, decimal> { { 1, 2000m } };
+
+        // Act
+        var result = EquityBillingCalculator.Calculate(orders, brackets, 40_000_000m, feePerBracket);
+
+        // Assert
+        Assert.Equal(2, result.BracketFees.Count);
+
+        // Faixa 1: 10M remaining, calculated 500, but CAP only has 100 remaining
+        var bracket1 = result.BracketFees.First(b => b.BracketId == 1);
+        Assert.Equal(10_000_000m, bracket1.NotionalInBracket);
+        Assert.Equal(500m, bracket1.CalculatedFee);
+        Assert.Equal(100m, bracket1.ChargedFee);
+        Assert.Equal(2000m, bracket1.AccumulatedFeeBefore);
+
+        // Faixa 2: 20M, full charge
+        var bracket2 = result.BracketFees.First(b => b.BracketId == 2);
+        Assert.Equal(20_000_000m, bracket2.NotionalInBracket);
+        Assert.Equal(900m, bracket2.CalculatedFee);
+        Assert.Equal(900m, bracket2.ChargedFee);
+        Assert.Equal(0m, bracket2.AccumulatedFeeBefore);
+    }
+
+    [Fact]
+    public void Calculate_BracketFees_EmptyWhenNoBrackets()
+    {
+        // Arrange
+        var orders = new List<Order> { CreateOrder(100_000, 100) };
+        var brackets = new List<EquityFeeBracket>();
+        var feePerBracket = new Dictionary<long, decimal>();
+
+        // Act
+        var result = EquityBillingCalculator.Calculate(orders, brackets, 0, feePerBracket);
+
+        // Assert
+        Assert.Empty(result.BracketFees);
+    }
+
+    [Fact]
+    public void Calculate_BracketFees_SumMatchesTotalFee()
+    {
+        // Arrange: Any volume that crosses multiple brackets
+        var orders = new List<Order> { CreateOrder(6_000_000, 100) }; // 600M notional
+        var brackets = CreateDefaultBrackets();
+        var feePerBracket = new Dictionary<long, decimal>();
+
+        // Act
+        var result = EquityBillingCalculator.Calculate(orders, brackets, 0, feePerBracket);
+
+        // Assert: Sum of ChargedFee in brackets should equal TotalFee
+        var sumBracketFees = result.BracketFees.Sum(b => b.ChargedFee);
+        Assert.Equal(result.TotalFee, sumBracketFees);
+    }
 }

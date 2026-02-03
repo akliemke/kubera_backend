@@ -34,8 +34,8 @@ public static class EquityBillingCalculator
         var totalNotional = orders.Sum(o => o.Notional);
         var accumulatedAfter = accumulatedBefore + totalNotional;
 
-        // Calcular fee total do dia usando faixas progressivas
-        var totalFee = CalculateProgressiveFee(
+        // Calcular fee total do dia usando faixas progressivas (com breakdown por faixa)
+        var (totalFee, bracketFees) = CalculateProgressiveFeeWithBreakdown(
             accumulatedBefore,
             totalNotional,
             brackets,
@@ -56,21 +56,24 @@ public static class EquityBillingCalculator
             AccumulatedBefore = accumulatedBefore,
             AccumulatedAfter = accumulatedAfter,
             ConfigId = brackets.FirstOrDefault()?.Id,
-            OrderFees = orderFees
+            OrderFees = orderFees,
+            BracketFees = bracketFees
         };
     }
 
     /// <summary>
-    /// Calcula o fee progressivo atravessando as faixas.
+    /// Calcula o fee progressivo atravessando as faixas, retornando também o breakdown por faixa.
     /// </summary>
-    private static decimal CalculateProgressiveFee(
+    private static (decimal TotalFee, List<BracketFeeResult> BracketFees) CalculateProgressiveFeeWithBreakdown(
         decimal accumulatedBefore,
         decimal dayNotional,
         IReadOnlyList<EquityFeeBracket> brackets,
         IReadOnlyDictionary<long, decimal> feeChargedPerBracket)
     {
+        var bracketFees = new List<BracketFeeResult>();
+
         if (brackets.Count == 0 || dayNotional <= 0)
-            return 0;
+            return (0, bracketFees);
 
         decimal totalFee = 0;
         decimal currentPosition = accumulatedBefore;
@@ -102,12 +105,23 @@ public static class EquityBillingCalculator
             var capRemaining = Math.Max(0, bracket.Cap - feeAlreadyCharged);
             var feeToCharge = Math.Min(calculatedFee, capRemaining);
 
+            // Registrar breakdown da faixa
+            bracketFees.Add(new BracketFeeResult
+            {
+                BracketId = bracket.Id,
+                NotionalInBracket = notionalInBracket,
+                CalculatedFee = calculatedFee,
+                ChargedFee = feeToCharge,
+                AccumulatedFeeBefore = feeAlreadyCharged,
+                BracketCap = bracket.Cap
+            });
+
             totalFee += feeToCharge;
             currentPosition += notionalInBracket;
             remainingNotional -= notionalInBracket;
         }
 
-        return totalFee;
+        return (totalFee, bracketFees);
     }
 
     /// <summary>

@@ -38,6 +38,7 @@ builder.Services.AddSingleton<EquityFeeBracketRepository>();
 builder.Services.AddSingleton<BmfFeeConfigRepository>();
 builder.Services.AddSingleton<DailyBillingRepository>();
 builder.Services.AddSingleton<OrderBillingRepository>();
+builder.Services.AddSingleton<BracketFeeTrackingRepository>();
 
 // Strategies
 builder.Services.AddSingleton<ICalculationStrategy, EquityCalculationStrategy>();
