@@ -54,9 +54,8 @@ public class BillingProcessingService : IBillingProcessingService
     {
         _logger.LogDebug("Processing broker {BrokerId} for date {Date}", brokerId, tradeDate);
 
-        // Get all orders for this broker/date
-        var allOrders = await _orderRepository.GetOrdersAsync(tradeDate.ToString("yyyy-MM-dd"), ct);
-        var brokerOrders = allOrders.Where(o => o.EnteringFirm == brokerId.ToString()).ToList();
+        // Get orders for this broker/date (filtered at DB level)
+        var brokerOrders = await _orderRepository.GetOrdersByBrokerAsync(tradeDate, brokerId, ct);
 
         if (brokerOrders.Count == 0)
         {

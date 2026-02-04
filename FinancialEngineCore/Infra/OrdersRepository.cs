@@ -1,4 +1,4 @@
-﻿using Dapper;
+using Dapper;
 using FinancialEngineCore.Model;
 
 namespace FinancialEngineCore.Infra;
@@ -17,6 +17,25 @@ public class OrdersRepository
         const string sql = "SELECT * FROM history.orders WHERE businessDate = @BusinessDate";
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
         var orders = await conn.QueryAsync<Order>(sql, new { BusinessDate = businessDate });
+        return orders.ToList();
+    }
+
+    public async Task<List<Order>> GetOrdersByBrokerAsync(
+        DateTime tradeDate,
+        int brokerId,
+        CancellationToken cancellationToken)
+    {
+        const string sql = @"
+            SELECT * FROM history.orders
+            WHERE businessDate = @BusinessDate
+              AND EnteringFirm = @BrokerId";
+
+        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
+        var orders = await conn.QueryAsync<Order>(sql, new
+        {
+            BusinessDate = tradeDate.ToString("yyyy-MM-dd"),
+            BrokerId = brokerId.ToString()
+        });
         return orders.ToList();
     }
 }
