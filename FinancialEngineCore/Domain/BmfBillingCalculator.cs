@@ -24,11 +24,6 @@ public static class BmfBillingCalculator
         decimal feeChargedInMonth,
         DateTime tradeDate)
     {
-        if (orders.Count == 0)
-        {
-            return CreateEmptyResult(orders, config.Id);
-        }
-
         var trader = orders[0].EnteringTrader;
         var broker = int.Parse(orders[0].EnteringFirm);
 
@@ -231,27 +226,6 @@ public static class BmfBillingCalculator
             Qty = o.CumQty,
             FeeAmount = Math.Round((o.CumQty / totalQty) * totalFee, 2)
         }).ToList();
-    }
-
-    private static BillingCalculationResult CreateEmptyResult(
-        IReadOnlyList<Order> orders,
-        long configId)
-    {
-        var first = orders.FirstOrDefault();
-        return new BillingCalculationResult
-        {
-            Trader = first?.EnteringTrader ?? "",
-            Broker = first != null ? int.Parse(first.EnteringFirm) : 0,
-            TradeDate = first?.TradeDate ?? DateTime.MinValue,
-            AssetClass = "BMF",
-            TotalNotional = 0,
-            TotalQty = 0,
-            TotalFee = 0,
-            AccumulatedBefore = 0,
-            AccumulatedAfter = 0,
-            ConfigId = configId,
-            OrderFees = new List<OrderFeeResult>()
-        };
     }
 
     private enum ContractType

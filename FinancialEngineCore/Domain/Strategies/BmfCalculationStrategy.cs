@@ -33,6 +33,9 @@ public class BmfCalculationStrategy : ICalculationStrategy
         IReadOnlyList<Order> orders,
         CancellationToken ct)
     {
+        if (orders.Count == 0)
+            return CreateEmptyResult(brokerId, trader, tradeDate, orders);
+
         // Get applicable config (special or default)
         var config = await _configRepository.GetApplicableConfigAsync(
             brokerId, trader, tradeDate, ct);

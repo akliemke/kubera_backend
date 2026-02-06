@@ -290,22 +290,6 @@ public class BmfBillingCalculatorTests
     }
 
     [Fact]
-    public void Calculate_EmptyOrders_ReturnsZero()
-    {
-        // Arrange
-        var orders = new List<Order>();
-        var config = CreateDefaultConfig();
-
-        // Act
-        var result = BmfBillingCalculator.Calculate(orders, config, 0, DateTime.Today);
-
-        // Assert
-        Assert.Equal(0m, result.TotalQty);
-        Assert.Equal(0m, result.TotalFee);
-        Assert.Empty(result.OrderFees);
-    }
-
-    [Fact]
     public void Calculate_WDO_MiniContract()
     {
         // Arrange: WDO is also mini

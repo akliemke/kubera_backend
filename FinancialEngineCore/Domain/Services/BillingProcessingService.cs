@@ -42,10 +42,16 @@ public class BillingProcessingService : IBillingProcessingService
 
         var brokerIds = ParseBrokerIds(billing.ProcessBroker);
 
-        foreach (var brokerId in brokerIds)
+        var options = new ParallelOptions
         {
-            await ProcessBrokerAsync(brokerId, billing.ProcessDate, billing.ProcessId, ct);
-        }
+            MaxDegreeOfParallelism = 4,
+            CancellationToken = ct
+        };
+
+        await Parallel.ForEachAsync(brokerIds, options, async (brokerId, token) =>
+        {
+            await ProcessBrokerAsync(brokerId, billing.ProcessDate, billing.ProcessId, token);
+        });
 
         _logger.LogInformation("Completed billing {ProcessId}", billing.ProcessId);
     }

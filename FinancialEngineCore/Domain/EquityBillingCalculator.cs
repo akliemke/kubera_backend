@@ -21,11 +21,6 @@ public static class EquityBillingCalculator
         decimal accumulatedBefore,
         IReadOnlyDictionary<long, decimal> feeChargedPerBracket)
     {
-        if (orders.Count == 0)
-        {
-            return CreateEmptyResult(orders, brackets.FirstOrDefault()?.Id);
-        }
-
         var trader = orders[0].EnteringTrader;
         var broker = int.Parse(orders[0].EnteringFirm);
         var tradeDate = orders[0].TradeDate;
@@ -152,24 +147,4 @@ public static class EquityBillingCalculator
         }).ToList();
     }
 
-    private static BillingCalculationResult CreateEmptyResult(
-        IReadOnlyList<Order> orders,
-        long? configId)
-    {
-        var first = orders.FirstOrDefault();
-        return new BillingCalculationResult
-        {
-            Trader = first?.EnteringTrader ?? "",
-            Broker = first != null ? int.Parse(first.EnteringFirm) : 0,
-            TradeDate = first?.TradeDate ?? DateTime.MinValue,
-            AssetClass = "EQUITY",
-            TotalNotional = 0,
-            TotalQty = 0,
-            TotalFee = 0,
-            AccumulatedBefore = 0,
-            AccumulatedAfter = 0,
-            ConfigId = configId,
-            OrderFees = new List<OrderFeeResult>()
-        };
-    }
 }

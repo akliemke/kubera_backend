@@ -32,6 +32,24 @@ public class EquityCalculationStrategy : ICalculationStrategy
         IReadOnlyList<Order> orders,
         CancellationToken ct)
     {
+        if (orders.Count == 0)
+        {
+            return new BillingCalculationResult
+            {
+                Trader = trader,
+                Broker = brokerId,
+                TradeDate = tradeDate,
+                AssetClass = AssetClass,
+                TotalNotional = 0,
+                TotalQty = 0,
+                TotalFee = 0,
+                AccumulatedBefore = 0,
+                AccumulatedAfter = 0,
+                ConfigId = null,
+                OrderFees = new List<OrderFeeResult>()
+            };
+        }
+
         // Get applicable brackets (special or default)
         var brackets = await _bracketRepository.GetApplicableBracketsAsync(
             brokerId, trader, tradeDate, ct);

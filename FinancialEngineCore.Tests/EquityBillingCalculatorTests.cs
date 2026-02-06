@@ -181,23 +181,6 @@ public class EquityBillingCalculatorTests
     }
 
     [Fact]
-    public void Calculate_EmptyOrders_ReturnsZero()
-    {
-        // Arrange
-        var orders = new List<Order>();
-        var brackets = CreateDefaultBrackets();
-        var feePerBracket = new Dictionary<long, decimal>();
-
-        // Act
-        var result = EquityBillingCalculator.Calculate(orders, brackets, 0, feePerBracket);
-
-        // Assert
-        Assert.Equal(0m, result.TotalNotional);
-        Assert.Equal(0m, result.TotalFee);
-        Assert.Empty(result.OrderFees);
-    }
-
-    [Fact]
     public void Calculate_NoBrackets_ReturnsZeroFee()
     {
         // Arrange
