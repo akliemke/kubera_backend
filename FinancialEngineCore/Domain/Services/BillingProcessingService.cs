@@ -152,38 +152,14 @@ public class BillingProcessingService : IBillingProcessingService
 
         await Task.WhenAll(bracketsTask, configsTask, summaryTask, feePerBracketTask, priceFactorsTask);
 
-        var summaries = await summaryTask;
+        var priceFactors = (await priceFactorsTask).ToDictionary(f => f.Symbol, f => f.Factor);
 
-        // Build equity accumulated by trader
-        var equityAccumulated = summaries
-            .Where(s => s.AssetClass.Equals("EQUITY", StringComparison.OrdinalIgnoreCase))
-            .ToDictionary(s => s.Trader, s => s.TotalNotional);
-
-        // Build BMF fee charged by trader
-        var bmfFeeCharged = summaries
-            .Where(s => s.AssetClass.Equals("BMF", StringComparison.OrdinalIgnoreCase))
-            .ToDictionary(s => s.Trader, s => s.TotalFee);
-
-        // Build fee per bracket by trader
-        var bracketFees = (await feePerBracketTask)
-            .GroupBy(f => f.Trader)
-            .ToDictionary(
-                g => g.Key,
-                g => g.ToDictionary(f => f.BracketId, f => f.TotalFee));
-
-        // Build price factors
-        var priceFactors = (await priceFactorsTask)
-            .ToDictionary(f => f.Symbol, f => f.Factor);
-
-        return new BrokerBillingContext
-        {
-            AllEquityBrackets = await bracketsTask,
-            AllBmfConfigs = await configsTask,
-            EquityAccumulatedByTrader = equityAccumulated,
-            BmfFeeChargedByTrader = bmfFeeCharged,
-            FeePerBracketByTrader = bracketFees,
-            PriceFactors = priceFactors
-        };
+        return new BrokerBillingContext(
+            await bracketsTask,
+            await configsTask,
+            await summaryTask,
+            await feePerBracketTask,
+            priceFactors);
     }
 
     private async Task PersistResultAsync(

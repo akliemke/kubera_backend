@@ -6,7 +6,6 @@ namespace FinancialEngineCore.Domain.Strategies;
 /// <summary>
 /// Calculation strategy for BMF assets (futures contracts).
 /// Uses per-contract fees with a single monthly CAP.
-/// All data is resolved from the pre-loaded BrokerBillingContext.
 /// </summary>
 public class BmfCalculationStrategy : ICalculationStrategy
 {
@@ -29,10 +28,7 @@ public class BmfCalculationStrategy : ICalculationStrategy
         if (orders.Count == 0)
             return CreateEmptyResult(brokerId, trader, tradeDate, orders);
 
-        // Resolve config: special (Trader == trader) or default (Trader == null)
-        var config = context.AllBmfConfigs
-            .FirstOrDefault(c => c.Trader != null && c.Trader.Equals(trader, StringComparison.OrdinalIgnoreCase))
-            ?? context.AllBmfConfigs.FirstOrDefault(c => c.Trader == null);
+        var config = context.GetBmfConfig(trader);
 
         if (config == null)
         {
@@ -43,10 +39,8 @@ public class BmfCalculationStrategy : ICalculationStrategy
             return CreateEmptyResult(brokerId, trader, tradeDate, orders);
         }
 
-        var feeChargedInMonth = context.BmfFeeChargedByTrader
-            .GetValueOrDefault(trader, 0m);
-
-        return BmfBillingCalculator.Calculate(orders, config, feeChargedInMonth, tradeDate);
+        return BmfBillingCalculator.Calculate(
+            orders, config, context.GetBmfFeeCharged(trader), tradeDate);
     }
 
     private BillingCalculationResult CreateEmptyResult(
