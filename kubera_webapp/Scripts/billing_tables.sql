@@ -128,6 +128,47 @@ CREATE INDEX idx_bracket_fee_tracking_bracket ON financial_engine.bracket_fee_tr
 COMMENT ON TABLE financial_engine.bracket_fee_tracking IS 'Tracking do fee cobrado em cada faixa EQUITY por dia - permite aplicar CAPs por faixa corretamente';
 
 -- ============================================
+-- Price Modification Factors
+-- ============================================
+CREATE TABLE financial_engine.price_modification_factors (
+    Id BIGSERIAL PRIMARY KEY,
+    Symbol VARCHAR(50) NOT NULL,
+    Factor DECIMAL(18,4) NOT NULL,  -- Fator divisor do preço (ex: 10000)
+    ValidFrom DATE NOT NULL,
+    ValidTo DATE NOT NULL,
+    IsActive BOOLEAN NOT NULL DEFAULT TRUE,
+    CreatedAt TIMESTAMP NOT NULL DEFAULT NOW(),
+    UpdatedAt TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_price_modification_factors_symbol ON financial_engine.price_modification_factors(Symbol);
+CREATE INDEX idx_price_modification_factors_validity ON financial_engine.price_modification_factors(Symbol, ValidFrom, ValidTo);
+
+COMMENT ON TABLE financial_engine.price_modification_factors IS 'Fatores de modificação de preço por ativo - ajusta notional para ativos cujo preço representa lote';
+COMMENT ON COLUMN financial_engine.price_modification_factors.Factor IS 'Fator divisor. Notional real = qty × (price / factor). Ex: 10000 para AZUL54';
+
+-- ============================================
+-- Entity Billing Configs
+-- ============================================
+CREATE TABLE financial_engine.entity_billing_configs (
+    Id BIGSERIAL PRIMARY KEY,
+    Broker INT NOT NULL,
+    Entity VARCHAR(100) NOT NULL,
+    ValidFrom DATE NOT NULL,
+    ValidTo DATE NOT NULL,
+    IsActive BOOLEAN NOT NULL DEFAULT TRUE,
+    CreatedAt TIMESTAMP NOT NULL DEFAULT NOW(),
+    UpdatedAt TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_entity_billing_configs_broker ON financial_engine.entity_billing_configs(Broker);
+CREATE INDEX idx_entity_billing_configs_broker_date ON financial_engine.entity_billing_configs(Broker, ValidFrom, ValidTo);
+CREATE UNIQUE INDEX idx_entity_billing_configs_unique ON financial_engine.entity_billing_configs(Broker, Entity, ValidFrom, ValidTo) WHERE IsActive = TRUE;
+
+COMMENT ON TABLE financial_engine.entity_billing_configs IS 'Configuração para cobrar por Entity (conta) ao invés de Trader para entities específicas';
+COMMENT ON COLUMN financial_engine.entity_billing_configs.Entity IS 'Nome da entity/conta. Quando configurada, ordens dessa entity são agrupadas por entity ao invés de por trader';
+
+-- ============================================
 -- Views para agregações
 -- ============================================
 

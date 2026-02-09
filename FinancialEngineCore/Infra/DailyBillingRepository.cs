@@ -1,3 +1,4 @@
+using System.Data;
 using Dapper;
 using FinancialEngineCore.Model;
 
@@ -120,6 +121,46 @@ public class DailyBillingRepository
     }
 
     /// <summary>
+    /// Deleta registros de um dia específico (transactional overload).
+    /// CASCADE handles order_billing and bracket_fee_tracking.
+    /// </summary>
+    public async Task DeleteByDateAsync(
+        int brokerId,
+        DateTime tradeDate,
+        IDbConnection conn,
+        IDbTransaction txn)
+    {
+        const string sql = @"
+            DELETE FROM financial_engine.daily_billing
+            WHERE Broker = @BrokerId AND TradeDate = @TradeDate";
+
+        await conn.ExecuteAsync(sql, new { BrokerId = brokerId, TradeDate = tradeDate }, transaction: txn);
+    }
+
+    /// <summary>
+    /// Insere um novo registro de billing diário (transactional overload).
+    /// </summary>
+    public async Task<long> InsertAsync(DailyBilling billing, IDbConnection conn, IDbTransaction txn)
+    {
+        const string sql = @"
+            INSERT INTO financial_engine.daily_billing
+                (Broker, Trader, TradeDate, AssetClass,
+                 TotalNotional, TotalQty, TotalFee,
+                 AccumulatedBefore, AccumulatedAfter,
+                 EquityConfigId, BmfConfigId,
+                 ProcessBillingId, CalculatedAt)
+            VALUES
+                (@Broker, @Trader, @TradeDate, @AssetClass,
+                 @TotalNotional, @TotalQty, @TotalFee,
+                 @AccumulatedBefore, @AccumulatedAfter,
+                 @EquityConfigId, @BmfConfigId,
+                 @ProcessBillingId, @CalculatedAt)
+            RETURNING Id";
+
+        return await conn.QuerySingleAsync<long>(sql, billing, transaction: txn);
+    }
+
+    /// <summary>
     /// Deleta registros de um trader/broker/dia específico para reprocessamento.
     /// </summary>
     public async Task DeleteAsync(
@@ -194,6 +235,38 @@ public class DailyBillingRepository
     }
 
     /// <summary>
+    /// Busca resumo do mês inteiro para um broker até uma data (bulk).
+    /// Retorna accumulated + fee per (Trader, AssetClass).
+    /// </summary>
+    public async Task<IReadOnlyList<TraderMonthSummary>> GetMonthSummaryByBrokerAsync(
+        int brokerId,
+        DateTime upToDate,
+        CancellationToken cancellationToken)
+    {
+        var monthStart = new DateTime(upToDate.Year, upToDate.Month, 1);
+
+        const string sql = @"
+            SELECT Trader, AssetClass,
+                   COALESCE(SUM(TotalNotional), 0) as TotalNotional,
+                   COALESCE(SUM(TotalQty), 0) as TotalQty,
+                   COALESCE(SUM(TotalFee), 0) as TotalFee
+            FROM financial_engine.daily_billing
+            WHERE Broker = @BrokerId
+              AND TradeDate >= @MonthStart
+              AND TradeDate < @UpToDate
+            GROUP BY Trader, AssetClass";
+
+        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
+        var result = await conn.QueryAsync<TraderMonthSummary>(sql, new
+        {
+            BrokerId = brokerId,
+            MonthStart = monthStart,
+            UpToDate = upToDate
+        });
+        return result.ToList();
+    }
+
+    /// <summary>
     /// Busca resumo de billing agrupado por Broker/AssetClass/Mês para um ano.
     /// </summary>
     public async Task<List<AnnualBillingSummary>> GetYearSummaryAsync(
@@ -244,6 +317,18 @@ public class AnnualBillingSummary
     public int Broker { get; set; }
     public required string AssetClass { get; set; }
     public int Month { get; set; }
+    public decimal TotalNotional { get; set; }
+    public decimal TotalQty { get; set; }
+    public decimal TotalFee { get; set; }
+}
+
+/// <summary>
+/// Resumo mensal por (Trader, AssetClass) — usado para pre-load bulk.
+/// </summary>
+public class TraderMonthSummary
+{
+    public required string Trader { get; set; }
+    public required string AssetClass { get; set; }
     public decimal TotalNotional { get; set; }
     public decimal TotalQty { get; set; }
     public decimal TotalFee { get; set; }

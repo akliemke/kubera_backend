@@ -1,4 +1,3 @@
-using FinancialEngineCore.Infra;
 using FinancialEngineCore.Model;
 using Microsoft.Extensions.Logging;
 
@@ -7,38 +6,33 @@ namespace FinancialEngineCore.Domain.Strategies;
 /// <summary>
 /// Calculation strategy for BMF assets (futures contracts).
 /// Uses per-contract fees with a single monthly CAP.
+/// All data is resolved from the pre-loaded BrokerBillingContext.
 /// </summary>
 public class BmfCalculationStrategy : ICalculationStrategy
 {
-    private readonly BmfFeeConfigRepository _configRepository;
-    private readonly DailyBillingRepository _dailyBillingRepository;
     private readonly ILogger<BmfCalculationStrategy> _logger;
 
     public string AssetClass => "BMF";
 
-    public BmfCalculationStrategy(
-        BmfFeeConfigRepository configRepository,
-        DailyBillingRepository dailyBillingRepository,
-        ILogger<BmfCalculationStrategy> logger)
+    public BmfCalculationStrategy(ILogger<BmfCalculationStrategy> logger)
     {
-        _configRepository = configRepository;
-        _dailyBillingRepository = dailyBillingRepository;
         _logger = logger;
     }
 
-    public async Task<BillingCalculationResult> CalculateAsync(
+    public BillingCalculationResult Calculate(
         int brokerId,
         string trader,
         DateTime tradeDate,
         IReadOnlyList<Order> orders,
-        CancellationToken ct)
+        BrokerBillingContext context)
     {
         if (orders.Count == 0)
             return CreateEmptyResult(brokerId, trader, tradeDate, orders);
 
-        // Get applicable config (special or default)
-        var config = await _configRepository.GetApplicableConfigAsync(
-            brokerId, trader, tradeDate, ct);
+        // Resolve config: special (Trader == trader) or default (Trader == null)
+        var config = context.AllBmfConfigs
+            .FirstOrDefault(c => c.Trader != null && c.Trader.Equals(trader, StringComparison.OrdinalIgnoreCase))
+            ?? context.AllBmfConfigs.FirstOrDefault(c => c.Trader == null);
 
         if (config == null)
         {
@@ -49,9 +43,8 @@ public class BmfCalculationStrategy : ICalculationStrategy
             return CreateEmptyResult(brokerId, trader, tradeDate, orders);
         }
 
-        // Get fee already charged in the month (for CAP)
-        var feeChargedInMonth = await _dailyBillingRepository.GetMonthFeeChargedAsync(
-            brokerId, trader, AssetClass, tradeDate, ct);
+        var feeChargedInMonth = context.BmfFeeChargedByTrader
+            .GetValueOrDefault(trader, 0m);
 
         return BmfBillingCalculator.Calculate(orders, config, feeChargedInMonth, tradeDate);
     }

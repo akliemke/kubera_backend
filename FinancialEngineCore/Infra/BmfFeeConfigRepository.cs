@@ -127,4 +127,27 @@ public class BmfFeeConfigRepository
         var rows = await conn.ExecuteAsync(sql, new { Id = id });
         return rows > 0;
     }
+
+    /// <summary>
+    /// Busca todas as configs ativas de um broker para uma data (todos os traders + default).
+    /// Usado para pre-load bulk — resolução special/default é feita em memória.
+    /// </summary>
+    public async Task<IReadOnlyList<BmfFeeConfig>> GetAllByBrokerAndDateAsync(
+        int brokerId,
+        DateTime tradeDate,
+        CancellationToken cancellationToken)
+    {
+        const string sql = @"
+            SELECT * FROM financial_engine.bmf_fee_configs
+            WHERE Broker = @BrokerId
+              AND IsActive = TRUE
+              AND @TradeDate >= ValidFrom
+              AND @TradeDate < ValidTo
+            ORDER BY Trader NULLS LAST";
+
+        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
+        var result = await conn.QueryAsync<BmfFeeConfig>(
+            sql, new { BrokerId = brokerId, TradeDate = tradeDate });
+        return result.ToList();
+    }
 }

@@ -1,4 +1,3 @@
-using FinancialEngineCore.Infra;
 using FinancialEngineCore.Model;
 
 namespace FinancialEngineCore.Domain.Strategies;
@@ -6,31 +5,18 @@ namespace FinancialEngineCore.Domain.Strategies;
 /// <summary>
 /// Calculation strategy for EQUITY assets (stocks, options, REITs).
 /// Uses progressive fee brackets with per-bracket CAPs.
+/// All data is resolved from the pre-loaded BrokerBillingContext.
 /// </summary>
 public class EquityCalculationStrategy : ICalculationStrategy
 {
-    private readonly EquityFeeBracketRepository _bracketRepository;
-    private readonly DailyBillingRepository _dailyBillingRepository;
-    private readonly BracketFeeTrackingRepository _bracketFeeTrackingRepository;
-
     public string AssetClass => "EQUITY";
 
-    public EquityCalculationStrategy(
-        EquityFeeBracketRepository bracketRepository,
-        DailyBillingRepository dailyBillingRepository,
-        BracketFeeTrackingRepository bracketFeeTrackingRepository)
-    {
-        _bracketRepository = bracketRepository;
-        _dailyBillingRepository = dailyBillingRepository;
-        _bracketFeeTrackingRepository = bracketFeeTrackingRepository;
-    }
-
-    public async Task<BillingCalculationResult> CalculateAsync(
+    public BillingCalculationResult Calculate(
         int brokerId,
         string trader,
         DateTime tradeDate,
         IReadOnlyList<Order> orders,
-        CancellationToken ct)
+        BrokerBillingContext context)
     {
         if (orders.Count == 0)
         {
@@ -50,23 +36,26 @@ public class EquityCalculationStrategy : ICalculationStrategy
             };
         }
 
-        // Get applicable brackets (special or default)
-        var brackets = await _bracketRepository.GetApplicableBracketsAsync(
-            brokerId, trader, tradeDate, ct);
-        var bracketList = brackets.ToList();
+        // Resolve brackets: special (Trader == trader) or default (Trader == null)
+        var specialBrackets = context.AllEquityBrackets
+            .Where(b => b.Trader != null && b.Trader.Equals(trader, StringComparison.OrdinalIgnoreCase))
+            .ToList();
 
-        // Get accumulated notional for the month
-        var accumulatedBefore = await _dailyBillingRepository.GetMonthAccumulatedAsync(
-            brokerId, trader, AssetClass, tradeDate, ct);
+        var brackets = specialBrackets.Count > 0
+            ? specialBrackets
+            : context.AllEquityBrackets.Where(b => b.Trader == null).ToList();
 
-        // Get fee already charged per bracket in the month (for CAP enforcement)
-        var feeChargedPerBracket = await _bracketFeeTrackingRepository.GetMonthFeePerBracketAsync(
-            brokerId, trader, tradeDate, ct);
+        var accumulatedBefore = context.EquityAccumulatedByTrader
+            .GetValueOrDefault(trader, 0m);
+
+        var feePerBracket = context.FeePerBracketByTrader
+            .GetValueOrDefault(trader, new Dictionary<long, decimal>());
 
         return EquityBillingCalculator.Calculate(
             orders,
-            bracketList,
+            brackets,
             accumulatedBefore,
-            feeChargedPerBracket);
+            feePerBracket,
+            context.PriceFactors);
     }
 }

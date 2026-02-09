@@ -15,18 +15,20 @@ public static class EquityBillingCalculator
     /// <param name="brackets">Faixas de cobrança aplicáveis (ordenadas por NotionalFrom)</param>
     /// <param name="accumulatedBefore">Volume acumulado no mês até o dia anterior</param>
     /// <param name="feeChargedPerBracket">Fee já cobrado em cada faixa no mês (para aplicar CAPs)</param>
+    /// <param name="priceFactors">Fatores de modificação de preço por símbolo (symbol → factor)</param>
     public static BillingCalculationResult Calculate(
         IReadOnlyList<Order> orders,
         IReadOnlyList<EquityFeeBracket> brackets,
         decimal accumulatedBefore,
-        IReadOnlyDictionary<long, decimal> feeChargedPerBracket)
+        IReadOnlyDictionary<long, decimal> feeChargedPerBracket,
+        IReadOnlyDictionary<string, decimal> priceFactors)
     {
         var trader = orders[0].EnteringTrader;
         var broker = int.Parse(orders[0].EnteringFirm);
         var tradeDate = orders[0].TradeDate;
 
-        // Calcular notional total do dia
-        var totalNotional = orders.Sum(o => o.Notional);
+        // Calcular notional total do dia (com ajuste de fator de preço)
+        var totalNotional = orders.Sum(o => GetAdjustedNotional(o, priceFactors));
         var accumulatedAfter = accumulatedBefore + totalNotional;
 
         // Calcular fee total do dia usando faixas progressivas (com breakdown por faixa)
@@ -37,7 +39,7 @@ public static class EquityBillingCalculator
             feeChargedPerBracket);
 
         // Distribuir fee proporcionalmente entre as ordens
-        var orderFees = DistributeFeeProportionally(orders, totalNotional, totalFee);
+        var orderFees = DistributeFeeProportionally(orders, totalNotional, totalFee, priceFactors);
 
         return new BillingCalculationResult
         {
@@ -125,26 +127,44 @@ public static class EquityBillingCalculator
     private static List<OrderFeeResult> DistributeFeeProportionally(
         IReadOnlyList<Order> orders,
         decimal totalNotional,
-        decimal totalFee)
+        decimal totalFee,
+        IReadOnlyDictionary<string, decimal> priceFactors)
     {
         if (totalNotional == 0)
         {
             return orders.Select(o => new OrderFeeResult
             {
                 OrderId = o.Id,
-                Notional = o.Notional,
+                Notional = GetAdjustedNotional(o, priceFactors),
                 Qty = 0,
                 FeeAmount = 0
             }).ToList();
         }
 
-        return orders.Select(o => new OrderFeeResult
+        return orders.Select(o =>
         {
-            OrderId = o.Id,
-            Notional = o.Notional,
-            Qty = 0,
-            FeeAmount = Math.Round((o.Notional / totalNotional) * totalFee, 2)
+            var adjustedNotional = GetAdjustedNotional(o, priceFactors);
+            return new OrderFeeResult
+            {
+                OrderId = o.Id,
+                Notional = adjustedNotional,
+                Qty = 0,
+                FeeAmount = Math.Round((adjustedNotional / totalNotional) * totalFee, 2)
+            };
         }).ToList();
+    }
+
+    /// <summary>
+    /// Retorna o notional ajustado pelo fator de preço, se houver.
+    /// Se o símbolo tiver fator cadastrado: qty × (price / factor).
+    /// Caso contrário: qty × price (notional padrão).
+    /// </summary>
+    private static decimal GetAdjustedNotional(Order order, IReadOnlyDictionary<string, decimal> priceFactors)
+    {
+        if (priceFactors.TryGetValue(order.Symbol, out var factor) && factor != 0)
+            return order.CumQty * (order.AvgPx / factor);
+
+        return order.Notional;
     }
 
 }

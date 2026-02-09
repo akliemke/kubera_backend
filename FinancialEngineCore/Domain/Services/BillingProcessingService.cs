@@ -8,6 +8,7 @@ namespace FinancialEngineCore.Domain.Services;
 /// <summary>
 /// Implements billing processing logic.
 /// Coordinates order retrieval, calculation (via strategies), and persistence.
+/// Uses pre-loaded context to avoid N+1 queries and wraps writes in a transaction.
 /// </summary>
 public class BillingProcessingService : IBillingProcessingService
 {
@@ -15,6 +16,11 @@ public class BillingProcessingService : IBillingProcessingService
     private readonly DailyBillingRepository _dailyBillingRepository;
     private readonly OrderBillingRepository _orderBillingRepository;
     private readonly BracketFeeTrackingRepository _bracketFeeTrackingRepository;
+    private readonly EntityBillingConfigRepository _entityBillingConfigRepository;
+    private readonly EquityFeeBracketRepository _bracketRepository;
+    private readonly BmfFeeConfigRepository _bmfConfigRepository;
+    private readonly PriceModificationFactorRepository _priceModificationFactorRepository;
+    private readonly DbConnectionFactory _dbConnectionFactory;
     private readonly CalculationStrategyRegistry _strategyRegistry;
     private readonly ILogger<BillingProcessingService> _logger;
 
@@ -23,6 +29,11 @@ public class BillingProcessingService : IBillingProcessingService
         DailyBillingRepository dailyBillingRepository,
         OrderBillingRepository orderBillingRepository,
         BracketFeeTrackingRepository bracketFeeTrackingRepository,
+        EntityBillingConfigRepository entityBillingConfigRepository,
+        EquityFeeBracketRepository bracketRepository,
+        BmfFeeConfigRepository bmfConfigRepository,
+        PriceModificationFactorRepository priceModificationFactorRepository,
+        DbConnectionFactory dbConnectionFactory,
         CalculationStrategyRegistry strategyRegistry,
         ILogger<BillingProcessingService> logger)
     {
@@ -30,6 +41,11 @@ public class BillingProcessingService : IBillingProcessingService
         _dailyBillingRepository = dailyBillingRepository;
         _orderBillingRepository = orderBillingRepository;
         _bracketFeeTrackingRepository = bracketFeeTrackingRepository;
+        _entityBillingConfigRepository = entityBillingConfigRepository;
+        _bracketRepository = bracketRepository;
+        _bmfConfigRepository = bmfConfigRepository;
+        _priceModificationFactorRepository = priceModificationFactorRepository;
+        _dbConnectionFactory = dbConnectionFactory;
         _strategyRegistry = strategyRegistry;
         _logger = logger;
     }
@@ -69,56 +85,112 @@ public class BillingProcessingService : IBillingProcessingService
             return;
         }
 
-        // Delete existing billing for reprocessing (order matters due to FK constraints)
-        await _bracketFeeTrackingRepository.DeleteByDateAsync(brokerId, tradeDate, ct);
-        await _orderBillingRepository.DeleteByDateAsync(brokerId, tradeDate, ct);
-        await _dailyBillingRepository.DeleteByDateAsync(brokerId, tradeDate, ct);
+        // Resolve billing key: entity-based or trader-based
+        var entityConfigs = await _entityBillingConfigRepository
+            .GetByBrokerAndDateAsync(brokerId, tradeDate, ct);
+        var entityBillingSet = new HashSet<string>(
+            entityConfigs.Select(c => c.Entity),
+            StringComparer.OrdinalIgnoreCase);
 
-        // Group by (Trader, AssetClass)
+        // Pre-load all data needed for calculations (5 queries in parallel)
+        var context = await PreloadBrokerContextAsync(brokerId, tradeDate, ct);
+
+        // Group by (BillingKey, AssetClass)
         var groups = brokerOrders
-            .GroupBy(o => new { o.EnteringTrader, o.AssetClass })
+            .GroupBy(o => new
+            {
+                BillingKey = ResolveBillingKey(o, entityBillingSet),
+                o.AssetClass
+            })
             .ToList();
 
-        foreach (var group in groups)
+        // All writes within a single transaction
+        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(ct);
+        using var txn = conn.BeginTransaction();
+        try
         {
-            var orders = group.ToList();
-            var trader = group.Key.EnteringTrader;
-            var assetClass = group.Key.AssetClass;
+            // Delete existing billing for reprocessing (CASCADE handles children)
+            await _dailyBillingRepository.DeleteByDateAsync(brokerId, tradeDate, conn, txn);
 
-            var result = await CalculateAsync(brokerId, trader, tradeDate, assetClass, orders, ct);
-
-            if (result != null)
+            foreach (var group in groups)
             {
-                await PersistResultAsync(result, processBillingId, ct);
+                var orders = group.ToList();
+                var trader = group.Key.BillingKey;
+                var assetClass = group.Key.AssetClass;
+
+                var strategy = _strategyRegistry.GetStrategy(assetClass);
+
+                if (strategy == null)
+                {
+                    _logger.LogWarning(
+                        "No calculation strategy found for AssetClass {AssetClass}, trader {Trader}",
+                        assetClass, trader);
+                    continue;
+                }
+
+                var result = strategy.Calculate(brokerId, trader, tradeDate, orders, context);
+                await PersistResultAsync(result, processBillingId, conn, txn);
             }
+
+            txn.Commit();
+        }
+        catch
+        {
+            txn.Rollback();
+            throw;
         }
     }
 
-    private async Task<BillingCalculationResult?> CalculateAsync(
-        int brokerId,
-        string trader,
-        DateTime tradeDate,
-        string assetClass,
-        List<Order> orders,
-        CancellationToken ct)
+    private async Task<BrokerBillingContext> PreloadBrokerContextAsync(
+        int brokerId, DateTime tradeDate, CancellationToken ct)
     {
-        var strategy = _strategyRegistry.GetStrategy(assetClass);
+        var bracketsTask = _bracketRepository.GetAllByBrokerAndDateAsync(brokerId, tradeDate, ct);
+        var configsTask = _bmfConfigRepository.GetAllByBrokerAndDateAsync(brokerId, tradeDate, ct);
+        var summaryTask = _dailyBillingRepository.GetMonthSummaryByBrokerAsync(brokerId, tradeDate, ct);
+        var feePerBracketTask = _bracketFeeTrackingRepository.GetMonthFeePerBracketByBrokerAsync(brokerId, tradeDate, ct);
+        var priceFactorsTask = _priceModificationFactorRepository.GetAllByDateAsync(tradeDate, ct);
 
-        if (strategy == null)
+        await Task.WhenAll(bracketsTask, configsTask, summaryTask, feePerBracketTask, priceFactorsTask);
+
+        var summaries = await summaryTask;
+
+        // Build equity accumulated by trader
+        var equityAccumulated = summaries
+            .Where(s => s.AssetClass.Equals("EQUITY", StringComparison.OrdinalIgnoreCase))
+            .ToDictionary(s => s.Trader, s => s.TotalNotional);
+
+        // Build BMF fee charged by trader
+        var bmfFeeCharged = summaries
+            .Where(s => s.AssetClass.Equals("BMF", StringComparison.OrdinalIgnoreCase))
+            .ToDictionary(s => s.Trader, s => s.TotalFee);
+
+        // Build fee per bracket by trader
+        var bracketFees = (await feePerBracketTask)
+            .GroupBy(f => f.Trader)
+            .ToDictionary(
+                g => g.Key,
+                g => g.ToDictionary(f => f.BracketId, f => f.TotalFee));
+
+        // Build price factors
+        var priceFactors = (await priceFactorsTask)
+            .ToDictionary(f => f.Symbol, f => f.Factor);
+
+        return new BrokerBillingContext
         {
-            _logger.LogWarning(
-                "No calculation strategy found for AssetClass {AssetClass}, trader {Trader}",
-                assetClass, trader);
-            return null;
-        }
-
-        return await strategy.CalculateAsync(brokerId, trader, tradeDate, orders, ct);
+            AllEquityBrackets = await bracketsTask,
+            AllBmfConfigs = await configsTask,
+            EquityAccumulatedByTrader = equityAccumulated,
+            BmfFeeChargedByTrader = bmfFeeCharged,
+            FeePerBracketByTrader = bracketFees,
+            PriceFactors = priceFactors
+        };
     }
 
     private async Task PersistResultAsync(
         BillingCalculationResult result,
         int processBillingId,
-        CancellationToken ct)
+        System.Data.IDbConnection conn,
+        System.Data.IDbTransaction txn)
     {
         var dailyBilling = new DailyBilling
         {
@@ -137,7 +209,7 @@ public class BillingProcessingService : IBillingProcessingService
             CalculatedAt = DateTime.UtcNow
         };
 
-        var dailyBillingId = await _dailyBillingRepository.InsertAsync(dailyBilling, ct);
+        var dailyBillingId = await _dailyBillingRepository.InsertAsync(dailyBilling, conn, txn);
 
         // Persist order fees
         var orderBillings = result.OrderFees.Select(of => new OrderBilling
@@ -153,7 +225,7 @@ public class BillingProcessingService : IBillingProcessingService
             FeeAmount = of.FeeAmount
         }).ToList();
 
-        await _orderBillingRepository.InsertBatchAsync(orderBillings, ct);
+        await _orderBillingRepository.InsertBatchAsync(orderBillings, conn, txn);
 
         // Persist bracket fee tracking (EQUITY only)
         if (result.BracketFees.Count > 0)
@@ -169,12 +241,20 @@ public class BillingProcessingService : IBillingProcessingService
                 BracketCap = bf.BracketCap
             }).ToList();
 
-            await _bracketFeeTrackingRepository.InsertBatchAsync(bracketTrackings, ct);
+            await _bracketFeeTrackingRepository.InsertBatchAsync(bracketTrackings, conn, txn);
         }
 
         _logger.LogDebug(
             "Persisted billing for {Trader}/{Broker}/{Date}/{AssetClass}: Fee={Fee}, Brackets={BracketCount}",
             result.Trader, result.Broker, result.TradeDate, result.AssetClass, result.TotalFee, result.BracketFees.Count);
+    }
+
+    internal static string ResolveBillingKey(Order order, HashSet<string> entityBillingSet)
+    {
+        if (entityBillingSet.Count > 0 && entityBillingSet.Contains(order.Entity))
+            return order.Entity;
+
+        return order.EnteringTrader;
     }
 
     private static List<int> ParseBrokerIds(string processBroker)

@@ -1,3 +1,4 @@
+using System.Data;
 using Dapper;
 using FinancialEngineCore.Model;
 
@@ -29,6 +30,25 @@ public class OrderBillingRepository
 
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
         await conn.ExecuteAsync(sql, orderBillings);
+    }
+
+    /// <summary>
+    /// Insere múltiplos registros de billing por ordem (transactional overload).
+    /// </summary>
+    public async Task InsertBatchAsync(
+        IEnumerable<OrderBilling> orderBillings,
+        IDbConnection conn,
+        IDbTransaction txn)
+    {
+        const string sql = @"
+            INSERT INTO financial_engine.order_billing
+                (OrderId, DailyBillingId, Broker, Trader, TradeDate,
+                 AssetClass, Notional, Qty, FeeAmount)
+            VALUES
+                (@OrderId, @DailyBillingId, @Broker, @Trader, @TradeDate,
+                 @AssetClass, @Notional, @Qty, @FeeAmount)";
+
+        await conn.ExecuteAsync(sql, orderBillings, transaction: txn);
     }
 
     /// <summary>

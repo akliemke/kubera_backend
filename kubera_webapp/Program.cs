@@ -39,6 +39,8 @@ builder.Services.AddSingleton<BmfFeeConfigRepository>();
 builder.Services.AddSingleton<DailyBillingRepository>();
 builder.Services.AddSingleton<OrderBillingRepository>();
 builder.Services.AddSingleton<BracketFeeTrackingRepository>();
+builder.Services.AddSingleton<PriceModificationFactorRepository>();
+builder.Services.AddSingleton<EntityBillingConfigRepository>();
 
 // Strategies
 builder.Services.AddSingleton<ICalculationStrategy, EquityCalculationStrategy>();
@@ -64,6 +66,8 @@ app.MapBrokerEndpoints();
 app.MapFinancialEndpoints();
 app.MapEquityFeeBracketEndpoints();
 app.MapBmfFeeConfigEndpoints();
+app.MapPriceModificationFactorEndpoints();
+app.MapEntityBillingConfigEndpoints();
 
 app.MapGet("/", () => "Hello World!");
 

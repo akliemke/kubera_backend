@@ -5,6 +5,7 @@ namespace FinancialEngineCore.Domain.Strategies;
 /// <summary>
 /// Strategy interface for asset-class-specific billing calculations.
 /// Each asset class (EQUITY, BMF, etc.) implements its own strategy.
+/// Calculations are synchronous — all required data is pre-loaded in BrokerBillingContext.
 /// </summary>
 public interface ICalculationStrategy
 {
@@ -14,12 +15,12 @@ public interface ICalculationStrategy
     string AssetClass { get; }
 
     /// <summary>
-    /// Calculates the billing for a set of orders.
+    /// Calculates the billing for a set of orders using pre-loaded context.
     /// </summary>
-    Task<BillingCalculationResult> CalculateAsync(
+    BillingCalculationResult Calculate(
         int brokerId,
         string trader,
         DateTime tradeDate,
         IReadOnlyList<Order> orders,
-        CancellationToken ct);
+        BrokerBillingContext context);
 }
