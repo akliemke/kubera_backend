@@ -130,13 +130,13 @@ public static class PriceModificationFactorController
 public record CreatePriceModificationFactorRequest(
     string Symbol,
     decimal Factor,
-    DateTime ValidFrom,
-    DateTime ValidTo
+    DateOnly ValidFrom,
+    DateOnly ValidTo
 );
 
 public record UpdatePriceModificationFactorRequest(
     string Symbol,
     decimal Factor,
-    DateTime ValidFrom,
-    DateTime ValidTo
+    DateOnly ValidFrom,
+    DateOnly ValidTo
 );

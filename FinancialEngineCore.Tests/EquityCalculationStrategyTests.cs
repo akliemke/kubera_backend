@@ -1,9 +1,9 @@
-using FinancialEngineCore.Domain;
+using FinancialEngineCore.Domain.Strategies;
 using FinancialEngineCore.Model;
 
 namespace FinancialEngineCore.Tests;
 
-public class EquityBillingCalculatorTests
+public class EquityCalculationStrategyTests
 {
     private static readonly Dictionary<string, decimal> NoPriceFactors = new();
 
@@ -32,7 +32,7 @@ public class EquityBillingCalculatorTests
             Entity = "MESA1",
             OmsInstance = "OMS1",
             Side = "BUY",
-            TradeDate = DateTime.Today
+            TradeDate = DateOnly.FromDateTime(DateTime.Today)
         };
     }
 
@@ -45,7 +45,7 @@ public class EquityBillingCalculatorTests
         var feePerBracket = new Dictionary<long, decimal>();
 
         // Act
-        var result = EquityBillingCalculator.Calculate(orders, brackets, 0, feePerBracket, NoPriceFactors);
+        var result = EquityCalculationStrategy.Calculate(orders, brackets, 0, feePerBracket, NoPriceFactors);
 
         // Assert: 10M * 0.00005 = 500
         Assert.Equal(10_000_000m, result.TotalNotional);
@@ -63,7 +63,7 @@ public class EquityBillingCalculatorTests
         var feePerBracket = new Dictionary<long, decimal>();
 
         // Act
-        var result = EquityBillingCalculator.Calculate(orders, brackets, 0, feePerBracket, NoPriceFactors);
+        var result = EquityCalculationStrategy.Calculate(orders, brackets, 0, feePerBracket, NoPriceFactors);
 
         // Assert: 50M * 0.00005 = 2500 -> CAP 2100
         Assert.Equal(50_000_000m, result.TotalNotional);
@@ -83,7 +83,7 @@ public class EquityBillingCalculatorTests
         var feePerBracket = new Dictionary<long, decimal>();
 
         // Act
-        var result = EquityBillingCalculator.Calculate(orders, brackets, 0, feePerBracket, NoPriceFactors);
+        var result = EquityCalculationStrategy.Calculate(orders, brackets, 0, feePerBracket, NoPriceFactors);
 
         // Assert
         Assert.Equal(200_000_000m, result.TotalNotional);
@@ -103,7 +103,7 @@ public class EquityBillingCalculatorTests
         var feePerBracket = new Dictionary<long, decimal>();
 
         // Act
-        var result = EquityBillingCalculator.Calculate(orders, brackets, 40_000_000m, feePerBracket, NoPriceFactors);
+        var result = EquityCalculationStrategy.Calculate(orders, brackets, 40_000_000m, feePerBracket, NoPriceFactors);
 
         // Assert
         Assert.Equal(30_000_000m, result.TotalNotional);
@@ -125,7 +125,7 @@ public class EquityBillingCalculatorTests
         var feePerBracket = new Dictionary<long, decimal> { { 1, 2000m } };
 
         // Act
-        var result = EquityBillingCalculator.Calculate(orders, brackets, 40_000_000m, feePerBracket, NoPriceFactors);
+        var result = EquityCalculationStrategy.Calculate(orders, brackets, 40_000_000m, feePerBracket, NoPriceFactors);
 
         // Assert
         Assert.Equal(30_000_000m, result.TotalNotional);
@@ -147,7 +147,7 @@ public class EquityBillingCalculatorTests
         var feePerBracket = new Dictionary<long, decimal>();
 
         // Act
-        var result = EquityBillingCalculator.Calculate(orders, brackets, 0, feePerBracket, NoPriceFactors);
+        var result = EquityCalculationStrategy.Calculate(orders, brackets, 0, feePerBracket, NoPriceFactors);
 
         // Assert
         Assert.Equal(10_000_000m, result.TotalNotional);
@@ -173,7 +173,7 @@ public class EquityBillingCalculatorTests
         var feePerBracket = new Dictionary<long, decimal>();
 
         // Act
-        var result = EquityBillingCalculator.Calculate(orders, brackets, 0, feePerBracket, NoPriceFactors);
+        var result = EquityCalculationStrategy.Calculate(orders, brackets, 0, feePerBracket, NoPriceFactors);
 
         // Assert
         Assert.Equal(10_000_000m, result.TotalNotional);
@@ -191,7 +191,7 @@ public class EquityBillingCalculatorTests
         var feePerBracket = new Dictionary<long, decimal>();
 
         // Act
-        var result = EquityBillingCalculator.Calculate(orders, brackets, 0, feePerBracket, NoPriceFactors);
+        var result = EquityCalculationStrategy.Calculate(orders, brackets, 0, feePerBracket, NoPriceFactors);
 
         // Assert
         Assert.Equal(10_000_000m, result.TotalNotional);
@@ -212,7 +212,7 @@ public class EquityBillingCalculatorTests
         var feePerBracket = new Dictionary<long, decimal>();
 
         // Act
-        var result = EquityBillingCalculator.Calculate(orders, brackets, 0, feePerBracket, NoPriceFactors);
+        var result = EquityCalculationStrategy.Calculate(orders, brackets, 0, feePerBracket, NoPriceFactors);
 
         // Assert
         Assert.Equal(600_000_000m, result.TotalNotional);
@@ -228,7 +228,7 @@ public class EquityBillingCalculatorTests
         var feePerBracket = new Dictionary<long, decimal>();
 
         // Act
-        var result = EquityBillingCalculator.Calculate(orders, brackets, 0, feePerBracket, NoPriceFactors);
+        var result = EquityCalculationStrategy.Calculate(orders, brackets, 0, feePerBracket, NoPriceFactors);
 
         // Assert: 3 faixas foram usadas
         Assert.Equal(3, result.BracketFees.Count);
@@ -262,7 +262,7 @@ public class EquityBillingCalculatorTests
         var feePerBracket = new Dictionary<long, decimal> { { 1, 2000m } };
 
         // Act
-        var result = EquityBillingCalculator.Calculate(orders, brackets, 40_000_000m, feePerBracket, NoPriceFactors);
+        var result = EquityCalculationStrategy.Calculate(orders, brackets, 40_000_000m, feePerBracket, NoPriceFactors);
 
         // Assert
         Assert.Equal(2, result.BracketFees.Count);
@@ -291,7 +291,7 @@ public class EquityBillingCalculatorTests
         var feePerBracket = new Dictionary<long, decimal>();
 
         // Act
-        var result = EquityBillingCalculator.Calculate(orders, brackets, 0, feePerBracket, NoPriceFactors);
+        var result = EquityCalculationStrategy.Calculate(orders, brackets, 0, feePerBracket, NoPriceFactors);
 
         // Assert
         Assert.Empty(result.BracketFees);
@@ -306,7 +306,7 @@ public class EquityBillingCalculatorTests
         var feePerBracket = new Dictionary<long, decimal>();
 
         // Act
-        var result = EquityBillingCalculator.Calculate(orders, brackets, 0, feePerBracket, NoPriceFactors);
+        var result = EquityCalculationStrategy.Calculate(orders, brackets, 0, feePerBracket, NoPriceFactors);
 
         // Assert: Sum of ChargedFee in brackets should equal TotalFee
         var sumBracketFees = result.BracketFees.Sum(b => b.ChargedFee);
@@ -336,7 +336,7 @@ public class EquityBillingCalculatorTests
         var priceFactors = new Dictionary<string, decimal> { { "AZUL54", 10m } };
 
         // Act
-        var result = EquityBillingCalculator.Calculate(orders, brackets, 0, feePerBracket, priceFactors);
+        var result = EquityCalculationStrategy.Calculate(orders, brackets, 0, feePerBracket, priceFactors);
 
         // Assert: adjusted notional = 100_000 × (100/10) = 1M
         Assert.Equal(1_000_000m, result.TotalNotional);
@@ -366,7 +366,7 @@ public class EquityBillingCalculatorTests
         var priceFactors = new Dictionary<string, decimal> { { "AZUL54", 10m } };
 
         // Act
-        var result = EquityBillingCalculator.Calculate(orders, brackets, 0, feePerBracket, priceFactors);
+        var result = EquityCalculationStrategy.Calculate(orders, brackets, 0, feePerBracket, priceFactors);
 
         // Assert
         Assert.Equal(11_000_000m, result.TotalNotional);
@@ -401,7 +401,7 @@ public class EquityBillingCalculatorTests
         var priceFactors = new Dictionary<string, decimal> { { "AZUL54", 10m } };
 
         // Act
-        var result = EquityBillingCalculator.Calculate(orders, brackets, 0, feePerBracket, priceFactors);
+        var result = EquityCalculationStrategy.Calculate(orders, brackets, 0, feePerBracket, priceFactors);
 
         // Assert
         Assert.Equal(3_000_000m, result.TotalNotional);

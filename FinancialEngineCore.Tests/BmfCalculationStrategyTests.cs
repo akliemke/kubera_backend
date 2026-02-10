@@ -1,9 +1,9 @@
-using FinancialEngineCore.Domain;
+using FinancialEngineCore.Domain.Strategies;
 using FinancialEngineCore.Model;
 
 namespace FinancialEngineCore.Tests;
 
-public class BmfBillingCalculatorTests
+public class BmfCalculationStrategyTests
 {
     private static BmfFeeConfig CreateDefaultConfig()
     {
@@ -12,8 +12,8 @@ public class BmfBillingCalculatorTests
             Id = 1,
             Broker = 1,
             Trader = null,
-            ValidFrom = new DateTime(2024, 1, 1),
-            ValidTo = new DateTime(2099, 12, 31),
+            ValidFrom = new DateOnly(2024, 1, 1),
+            ValidTo = new DateOnly(2099, 12, 31),
             ValorMini = 0.03m,
             ValorCheio = 0.15m,
             DI1Venc1a4 = 0.01m,
@@ -41,7 +41,7 @@ public class BmfBillingCalculatorTests
             Entity = "MESA1",
             OmsInstance = "OMS1",
             Side = "BUY",
-            TradeDate = new DateTime(2024, 11, 15) // November 2024
+            TradeDate = new DateOnly(2024, 11, 15) // November 2024
         };
     }
 
@@ -53,7 +53,7 @@ public class BmfBillingCalculatorTests
         var config = CreateDefaultConfig();
 
         // Act
-        var result = BmfBillingCalculator.Calculate(orders, config, 0, orders[0].TradeDate);
+        var result = BmfCalculationStrategy.Calculate(orders, config, 0, orders[0].TradeDate);
 
         // Assert
         Assert.Equal(500m, result.TotalQty);
@@ -68,7 +68,7 @@ public class BmfBillingCalculatorTests
         var config = CreateDefaultConfig();
 
         // Act
-        var result = BmfBillingCalculator.Calculate(orders, config, 0, orders[0].TradeDate);
+        var result = BmfCalculationStrategy.Calculate(orders, config, 0, orders[0].TradeDate);
 
         // Assert
         Assert.Equal(100m, result.TotalQty);
@@ -90,7 +90,7 @@ public class BmfBillingCalculatorTests
         var config = CreateDefaultConfig();
 
         // Act
-        var result = BmfBillingCalculator.Calculate(orders, config, 0, orders[0].TradeDate);
+        var result = BmfCalculationStrategy.Calculate(orders, config, 0, orders[0].TradeDate);
 
         // Assert
         Assert.Equal(600m, result.TotalQty);
@@ -102,13 +102,13 @@ public class BmfBillingCalculatorTests
     {
         // Arrange: DI1F25 (Jan/25) traded in Nov/24 = 2 months = 2nd maturity
         // 200 contracts at 0.01 = 2.00
-        var tradeDate = new DateTime(2024, 11, 15);
+        var tradeDate = new DateOnly(2024, 11, 15);
         var orders = new List<Order> { CreateBmfOrder("DI1F25", 200) };
         orders[0].TradeDate = tradeDate;
         var config = CreateDefaultConfig();
 
         // Act
-        var result = BmfBillingCalculator.Calculate(orders, config, 0, tradeDate);
+        var result = BmfCalculationStrategy.Calculate(orders, config, 0, tradeDate);
 
         // Assert
         Assert.Equal(200m, result.TotalQty);
@@ -123,13 +123,13 @@ public class BmfBillingCalculatorTests
         // Let's use a date where we get exactly 5th maturity
         // Trade in Dec/24, contract Apr/25 (J) = 4 months = 4th maturity
         // Trade in Nov/24, contract Apr/25 (J) = 5 months = 5th maturity
-        var tradeDate = new DateTime(2024, 11, 15);
+        var tradeDate = new DateOnly(2024, 11, 15);
         var orders = new List<Order> { CreateBmfOrder("DI1J25", 100) }; // April 2025
         orders[0].TradeDate = tradeDate;
         var config = CreateDefaultConfig();
 
         // Act
-        var result = BmfBillingCalculator.Calculate(orders, config, 0, tradeDate);
+        var result = BmfCalculationStrategy.Calculate(orders, config, 0, tradeDate);
 
         // Assert: April is J, Nov to Apr = 5 months
         Assert.Equal(100m, result.TotalQty);
@@ -140,13 +140,13 @@ public class BmfBillingCalculatorTests
     public void Calculate_DI1_SixthMaturity()
     {
         // Arrange: Trade in Nov/24, contract May/25 (K) = 6 months = 6th maturity
-        var tradeDate = new DateTime(2024, 11, 15);
+        var tradeDate = new DateOnly(2024, 11, 15);
         var orders = new List<Order> { CreateBmfOrder("DI1K25", 100) }; // May 2025
         orders[0].TradeDate = tradeDate;
         var config = CreateDefaultConfig();
 
         // Act
-        var result = BmfBillingCalculator.Calculate(orders, config, 0, tradeDate);
+        var result = BmfCalculationStrategy.Calculate(orders, config, 0, tradeDate);
 
         // Assert
         Assert.Equal(100m, result.TotalQty);
@@ -157,13 +157,13 @@ public class BmfBillingCalculatorTests
     public void Calculate_DI1_SeventhMaturity()
     {
         // Arrange: Trade in Nov/24, contract Jun/25 (M) = 7 months = 7th maturity
-        var tradeDate = new DateTime(2024, 11, 15);
+        var tradeDate = new DateOnly(2024, 11, 15);
         var orders = new List<Order> { CreateBmfOrder("DI1M25", 100) }; // June 2025
         orders[0].TradeDate = tradeDate;
         var config = CreateDefaultConfig();
 
         // Act
-        var result = BmfBillingCalculator.Calculate(orders, config, 0, tradeDate);
+        var result = BmfCalculationStrategy.Calculate(orders, config, 0, tradeDate);
 
         // Assert
         Assert.Equal(100m, result.TotalQty);
@@ -174,13 +174,13 @@ public class BmfBillingCalculatorTests
     public void Calculate_DI1_EighthPlusMaturity()
     {
         // Arrange: Trade in Nov/24, contract Oct/25 (V) = 11 months = 11th maturity
-        var tradeDate = new DateTime(2024, 11, 15);
+        var tradeDate = new DateOnly(2024, 11, 15);
         var orders = new List<Order> { CreateBmfOrder("DI1V25", 100) }; // October 2025
         orders[0].TradeDate = tradeDate;
         var config = CreateDefaultConfig();
 
         // Act
-        var result = BmfBillingCalculator.Calculate(orders, config, 0, tradeDate);
+        var result = BmfCalculationStrategy.Calculate(orders, config, 0, tradeDate);
 
         // Assert
         Assert.Equal(100m, result.TotalQty);
@@ -196,7 +196,7 @@ public class BmfBillingCalculatorTests
         // DI1 (2nd mat): 200 * 0.01 = 2.00
         // DI1 (6th mat): 50 * 0.04 = 2.00
         // Total: 34.00
-        var tradeDate = new DateTime(2024, 11, 15);
+        var tradeDate = new DateOnly(2024, 11, 15);
         var orders = new List<Order>
         {
             CreateBmfOrder("WINZ24", 500),
@@ -208,7 +208,7 @@ public class BmfBillingCalculatorTests
         var config = CreateDefaultConfig();
 
         // Act
-        var result = BmfBillingCalculator.Calculate(orders, config, 0, tradeDate);
+        var result = BmfCalculationStrategy.Calculate(orders, config, 0, tradeDate);
 
         // Assert
         Assert.Equal(850m, result.TotalQty);
@@ -225,7 +225,7 @@ public class BmfBillingCalculatorTests
         var config = CreateDefaultConfig();
 
         // Act
-        var result = BmfBillingCalculator.Calculate(orders, config, 0, orders[0].TradeDate);
+        var result = BmfCalculationStrategy.Calculate(orders, config, 0, orders[0].TradeDate);
 
         // Assert
         Assert.Equal(1_000_000m, result.TotalQty);
@@ -243,7 +243,7 @@ public class BmfBillingCalculatorTests
         // Act - simulate massive previous charges
         // Actually let's make it charge more: 200,000 contracts = 6,000
         var orders2 = new List<Order> { CreateBmfOrder("WINZ24", 200_000) }; // 6,000 fee
-        var result = BmfBillingCalculator.Calculate(orders2, config, 20000m, orders2[0].TradeDate);
+        var result = BmfCalculationStrategy.Calculate(orders2, config, 20000m, orders2[0].TradeDate);
 
         // Assert: 6,000 calculated but only 5,000 cap remaining
         Assert.Equal(200_000m, result.TotalQty);
@@ -258,7 +258,7 @@ public class BmfBillingCalculatorTests
         var config = CreateDefaultConfig();
 
         // Act
-        var result = BmfBillingCalculator.Calculate(orders, config, 25000m, orders[0].TradeDate);
+        var result = BmfCalculationStrategy.Calculate(orders, config, 25000m, orders[0].TradeDate);
 
         // Assert: No more charges
         Assert.Equal(500m, result.TotalQty);
@@ -279,7 +279,7 @@ public class BmfBillingCalculatorTests
         var config = CreateDefaultConfig();
 
         // Act
-        var result = BmfBillingCalculator.Calculate(orders, config, 0, orders[0].TradeDate);
+        var result = BmfCalculationStrategy.Calculate(orders, config, 0, orders[0].TradeDate);
 
         // Assert
         Assert.Equal(1000m, result.TotalQty);
@@ -297,7 +297,7 @@ public class BmfBillingCalculatorTests
         var config = CreateDefaultConfig();
 
         // Act
-        var result = BmfBillingCalculator.Calculate(orders, config, 0, orders[0].TradeDate);
+        var result = BmfCalculationStrategy.Calculate(orders, config, 0, orders[0].TradeDate);
 
         // Assert: 1000 * 0.03 = 30.00
         Assert.Equal(1000m, result.TotalQty);
@@ -312,7 +312,7 @@ public class BmfBillingCalculatorTests
         var config = CreateDefaultConfig();
 
         // Act
-        var result = BmfBillingCalculator.Calculate(orders, config, 0, orders[0].TradeDate);
+        var result = BmfCalculationStrategy.Calculate(orders, config, 0, orders[0].TradeDate);
 
         // Assert: 100 * 0.15 = 15.00
         Assert.Equal(100m, result.TotalQty);

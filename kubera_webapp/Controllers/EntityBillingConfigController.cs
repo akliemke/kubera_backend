@@ -130,13 +130,13 @@ public static class EntityBillingConfigController
 public record CreateEntityBillingConfigRequest(
     int Broker,
     string Entity,
-    DateTime ValidFrom,
-    DateTime ValidTo
+    DateOnly ValidFrom,
+    DateOnly ValidTo
 );
 
 public record UpdateEntityBillingConfigRequest(
     int Broker,
     string Entity,
-    DateTime ValidFrom,
-    DateTime ValidTo
+    DateOnly ValidFrom,
+    DateOnly ValidTo
 );

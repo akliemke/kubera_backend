@@ -20,10 +20,10 @@ public class BracketFeeTrackingRepository
     public async Task<Dictionary<long, decimal>> GetMonthFeePerBracketAsync(
         int brokerId,
         string trader,
-        DateTime upToDate,
+        DateOnly upToDate,
         CancellationToken cancellationToken)
     {
-        var monthStart = new DateTime(upToDate.Year, upToDate.Month, 1);
+        var monthStart = new DateOnly(upToDate.Year, upToDate.Month, 1);
 
         const string sql = @"
             SELECT bft.BracketId, SUM(bft.ChargedFee) as TotalFee
@@ -95,7 +95,7 @@ public class BracketFeeTrackingRepository
     /// <summary>
     /// Deleta registros de tracking para um broker/data (para reprocessamento).
     /// </summary>
-    public async Task DeleteByDateAsync(int brokerId, DateTime tradeDate, CancellationToken cancellationToken)
+    public async Task DeleteByDateAsync(int brokerId, DateOnly tradeDate, CancellationToken cancellationToken)
     {
         const string sql = @"
             DELETE FROM financial_engine.bracket_fee_tracking
@@ -114,10 +114,10 @@ public class BracketFeeTrackingRepository
     /// </summary>
     public async Task<IReadOnlyList<TraderBracketFee>> GetMonthFeePerBracketByBrokerAsync(
         int brokerId,
-        DateTime upToDate,
+        DateOnly upToDate,
         CancellationToken cancellationToken)
     {
-        var monthStart = new DateTime(upToDate.Year, upToDate.Month, 1);
+        var monthStart = new DateOnly(upToDate.Year, upToDate.Month, 1);
 
         const string sql = @"
             SELECT db.Trader, bft.BracketId, SUM(bft.ChargedFee) as TotalFee

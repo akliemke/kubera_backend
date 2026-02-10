@@ -7,7 +7,7 @@ public class BillingCalculationResult
 {
     public required string Trader { get; init; }
     public int Broker { get; init; }
-    public DateTime TradeDate { get; init; }
+    public DateOnly TradeDate { get; init; }
     public required string AssetClass { get; init; }
 
     /// <summary>Volume financeiro total do dia (EQUITY)</summary>

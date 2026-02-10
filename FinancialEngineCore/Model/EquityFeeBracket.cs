@@ -15,8 +15,8 @@ public class EquityFeeBracket
     /// </summary>
     public string? Trader { get; set; }
 
-    public DateTime ValidFrom { get; set; }
-    public DateTime ValidTo { get; set; }
+    public DateOnly ValidFrom { get; set; }
+    public DateOnly ValidTo { get; set; }
 
     /// <summary>Volume mínimo da faixa (inclusive)</summary>
     public decimal NotionalFrom { get; set; }

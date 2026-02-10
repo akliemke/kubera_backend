@@ -1,3 +1,5 @@
+using System.Data;
+using Dapper;
 using FinancialEngineCore;
 using FinancialEngineCore.Domain.Services;
 using FinancialEngineCore.Domain.Strategies;
@@ -6,6 +8,8 @@ using HealthChecks.NpgSql;
 using KuberaWebApp.Controllers;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+
+SqlMapper.AddTypeHandler(new DateOnlyTypeHandler());
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -106,3 +110,19 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
 });
 
 app.Run();
+
+public class DateOnlyTypeHandler : SqlMapper.TypeHandler<DateOnly>
+{
+    public override DateOnly Parse(object value) => value switch
+    {
+        DateTime dt => DateOnly.FromDateTime(dt),
+        DateOnly d => d,
+        _ => DateOnly.FromDateTime(Convert.ToDateTime(value))
+    };
+
+    public override void SetValue(IDbDataParameter parameter, DateOnly value)
+    {
+        parameter.Value = value.ToDateTime(TimeOnly.MinValue);
+        parameter.DbType = DbType.Date;
+    }
+}

@@ -21,7 +21,7 @@ public class OrdersRepository
     }
 
     public async Task<List<Order>> GetOrdersByBrokerAsync(
-        DateTime tradeDate,
+        DateOnly tradeDate,
         int brokerId,
         CancellationToken cancellationToken)
     {

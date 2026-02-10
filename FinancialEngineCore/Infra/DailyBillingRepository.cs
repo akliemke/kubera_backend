@@ -20,10 +20,10 @@ public class DailyBillingRepository
         int brokerId,
         string trader,
         string assetClass,
-        DateTime upToDate,
+        DateOnly upToDate,
         CancellationToken cancellationToken)
     {
-        var monthStart = new DateTime(upToDate.Year, upToDate.Month, 1);
+        var monthStart = new DateOnly(upToDate.Year, upToDate.Month, 1);
 
         const string sql = @"
             SELECT COALESCE(SUM(
@@ -55,10 +55,10 @@ public class DailyBillingRepository
         int brokerId,
         string trader,
         string assetClass,
-        DateTime upToDate,
+        DateOnly upToDate,
         CancellationToken cancellationToken)
     {
-        var monthStart = new DateTime(upToDate.Year, upToDate.Month, 1);
+        var monthStart = new DateOnly(upToDate.Year, upToDate.Month, 1);
 
         const string sql = @"
             SELECT COALESCE(SUM(TotalFee), 0)
@@ -109,7 +109,7 @@ public class DailyBillingRepository
     /// </summary>
     public async Task DeleteByDateAsync(
         int brokerId,
-        DateTime tradeDate,
+        DateOnly tradeDate,
         CancellationToken cancellationToken)
     {
         const string sql = @"
@@ -126,7 +126,7 @@ public class DailyBillingRepository
     /// </summary>
     public async Task DeleteByDateAsync(
         int brokerId,
-        DateTime tradeDate,
+        DateOnly tradeDate,
         IDbConnection conn,
         IDbTransaction txn)
     {
@@ -166,7 +166,7 @@ public class DailyBillingRepository
     public async Task DeleteAsync(
         int brokerId,
         string trader,
-        DateTime tradeDate,
+        DateOnly tradeDate,
         string assetClass,
         CancellationToken cancellationToken)
     {
@@ -191,7 +191,7 @@ public class DailyBillingRepository
     /// Busca todos os registros de billing de um dia específico.
     /// </summary>
     public async Task<List<DailyBilling>> GetByDateAsync(
-        DateTime tradeDate,
+        DateOnly tradeDate,
         CancellationToken cancellationToken)
     {
         const string sql = @"
@@ -212,7 +212,7 @@ public class DailyBillingRepository
         int month,
         CancellationToken cancellationToken)
     {
-        var monthStart = new DateTime(year, month, 1);
+        var monthStart = new DateOnly(year, month, 1);
         var monthEnd = monthStart.AddMonths(1);
 
         const string sql = @"
@@ -240,10 +240,10 @@ public class DailyBillingRepository
     /// </summary>
     public async Task<IReadOnlyList<TraderMonthSummary>> GetMonthSummaryByBrokerAsync(
         int brokerId,
-        DateTime upToDate,
+        DateOnly upToDate,
         CancellationToken cancellationToken)
     {
-        var monthStart = new DateTime(upToDate.Year, upToDate.Month, 1);
+        var monthStart = new DateOnly(upToDate.Year, upToDate.Month, 1);
 
         const string sql = @"
             SELECT Trader, AssetClass,
@@ -273,8 +273,8 @@ public class DailyBillingRepository
         int year,
         CancellationToken cancellationToken)
     {
-        var yearStart = new DateTime(year, 1, 1);
-        var yearEnd = yearStart.AddYears(1);
+        var yearStart = new DateOnly(year, 1, 1);
+        var yearEnd = new DateOnly(year + 1, 1, 1);
 
         const string sql = @"
             SELECT

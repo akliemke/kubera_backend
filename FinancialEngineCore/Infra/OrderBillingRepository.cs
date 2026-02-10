@@ -86,7 +86,7 @@ public class OrderBillingRepository
     /// </summary>
     public async Task DeleteByDateAsync(
         int brokerId,
-        DateTime tradeDate,
+        DateOnly tradeDate,
         CancellationToken cancellationToken)
     {
         const string sql = @"

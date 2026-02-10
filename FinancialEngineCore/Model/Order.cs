@@ -36,7 +36,7 @@ public class Order
     public required string Entity { get; set; }
 
     /// <summary>Data da operação</summary>
-    public DateTime TradeDate { get; set; }
+    public DateOnly TradeDate { get; set; }
 
     /// <summary>Código do broker (corretora)</summary>
     public required string EnteringFirm { get; set; }

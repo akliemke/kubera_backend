@@ -57,8 +57,8 @@ public static class BrokerController
                 Code = request.Code,
                 Name = request.Name,
                 Document = request.Document,
-                Contacts = request.Contacts ?? [],
-                ContractDate = request.ContractDate ?? DateTime.UtcNow,
+                Contacts = request.Contacts?.ToArray() ?? [],
+                ContractDate = request.ContractDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
                 Status = true,
                 BillingCurrency = request.BillingCurrency ?? "BRL"
             };
@@ -93,7 +93,7 @@ public static class BrokerController
             existing.Code = request.Code;
             existing.Name = request.Name;
             existing.Document = request.Document;
-            existing.Contacts = request.Contacts ?? existing.Contacts;
+            existing.Contacts = request.Contacts?.ToArray() ?? existing.Contacts;
             existing.ContractDate = request.ContractDate ?? existing.ContractDate;
             existing.BillingCurrency = request.BillingCurrency ?? existing.BillingCurrency;
 
@@ -171,7 +171,7 @@ public record CreateBrokerRequest(
     string Name,
     string Document,
     List<string>? Contacts = null,
-    DateTime? ContractDate = null,
+    DateOnly? ContractDate = null,
     string? BillingCurrency = null
 );
 
@@ -180,7 +180,7 @@ public record UpdateBrokerRequest(
     string Name,
     string Document,
     List<string>? Contacts = null,
-    DateTime? ContractDate = null,
+    DateOnly? ContractDate = null,
     string? BillingCurrency = null
 );
 

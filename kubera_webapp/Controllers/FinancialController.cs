@@ -31,7 +31,7 @@ public static class FinancialController
             ProcessBillingRepository repository,
             CancellationToken ct) =>
         {
-            if (!DateTime.TryParse(request.Date, out var businessDate))
+            if (!DateOnly.TryParse(request.Date, out var businessDate))
                 return Results.BadRequest("Formato de data inválido. Use yyyy-MM-dd.");
 
             var processBilling = new ProcessBilling
@@ -51,12 +51,20 @@ public static class FinancialController
             });
         });
 
+        financialGroup.MapGet("/history", async (
+            ProcessBillingRepository repository,
+            CancellationToken ct) =>
+        {
+            var items = await repository.GetRecentAsync(ct);
+            return Results.Ok(items);
+        });
+
         financialGroup.MapPost("/start-process/{day}", async (
             string day,
             ProcessBillingRepository repository,
             CancellationToken ct) =>
         {
-            if (!DateTime.TryParse(day, out var businessDate))
+            if (!DateOnly.TryParse(day, out var businessDate))
                 return Results.BadRequest("Formato de data inválido. Use yyyy-MM-dd.");
 
             var processBilling = new ProcessBilling

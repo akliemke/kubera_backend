@@ -70,4 +70,14 @@ public class ProcessBillingRepository
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
         await conn.ExecuteAsync(sql, processBilling);
     }
+
+    public async Task<List<ProcessBilling>> GetRecentAsync(CancellationToken cancellationToken)
+    {
+        const string sql = @"
+            SELECT * FROM management.process_billing
+            ORDER BY ProcessId DESC
+            LIMIT 50";
+        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
+        return (await conn.QueryAsync<ProcessBilling>(sql)).ToList();
+    }
 }

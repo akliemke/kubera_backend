@@ -224,8 +224,8 @@ public static class EquityFeeBracketController
 public record CreateEquityFeeBracketRequest(
     int Broker,
     string? Trader,
-    DateTime ValidFrom,
-    DateTime ValidTo,
+    DateOnly ValidFrom,
+    DateOnly ValidTo,
     decimal NotionalFrom,
     decimal? NotionalTo,
     decimal Bps,
@@ -233,8 +233,8 @@ public record CreateEquityFeeBracketRequest(
 );
 
 public record UpdateEquityFeeBracketRequest(
-    DateTime ValidFrom,
-    DateTime ValidTo,
+    DateOnly ValidFrom,
+    DateOnly ValidTo,
     decimal NotionalFrom,
     decimal? NotionalTo,
     decimal Bps,

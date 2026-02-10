@@ -13,7 +13,7 @@ public class EntityBillingConfigRepository
     }
 
     public async Task<IEnumerable<EntityBillingConfig>> GetByBrokerAndDateAsync(
-        int brokerId, DateTime tradeDate, CancellationToken cancellationToken)
+        int brokerId, DateOnly tradeDate, CancellationToken cancellationToken)
     {
         const string sql = @"
             SELECT * FROM financial_engine.entity_billing_configs

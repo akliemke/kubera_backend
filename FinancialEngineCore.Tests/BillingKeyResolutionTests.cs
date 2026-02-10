@@ -19,7 +19,7 @@ public class BillingKeyResolutionTests
             EnteringFirm = "1",
             OmsInstance = "OMS1",
             Side = "BUY",
-            TradeDate = DateTime.Today
+            TradeDate = DateOnly.FromDateTime(DateTime.Today)
         };
     }
 

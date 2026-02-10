@@ -250,8 +250,8 @@ public static class BmfFeeConfigController
 public record CreateBmfFeeConfigRequest(
     int Broker,
     string? Trader,
-    DateTime ValidFrom,
-    DateTime ValidTo,
+    DateOnly ValidFrom,
+    DateOnly ValidTo,
     decimal ValorMini,
     decimal ValorCheio,
     decimal DI1Venc1a4,
@@ -263,8 +263,8 @@ public record CreateBmfFeeConfigRequest(
 );
 
 public record UpdateBmfFeeConfigRequest(
-    DateTime ValidFrom,
-    DateTime ValidTo,
+    DateOnly ValidFrom,
+    DateOnly ValidTo,
     decimal ValorMini,
     decimal ValorCheio,
     decimal DI1Venc1a4,

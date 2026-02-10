@@ -13,7 +13,7 @@ public class PriceModificationFactorRepository
     }
 
     public async Task<PriceModificationFactor?> GetBySymbolAndDateAsync(
-        string symbol, DateTime tradeDate, CancellationToken cancellationToken)
+        string symbol, DateOnly tradeDate, CancellationToken cancellationToken)
     {
         const string sql = @"
             SELECT * FROM financial_engine.price_modification_factors
@@ -29,7 +29,7 @@ public class PriceModificationFactorRepository
     }
 
     public async Task<IEnumerable<PriceModificationFactor>> GetAllByDateAsync(
-        DateTime tradeDate, CancellationToken cancellationToken)
+        DateOnly tradeDate, CancellationToken cancellationToken)
     {
         const string sql = @"
             SELECT * FROM financial_engine.price_modification_factors

@@ -72,7 +72,7 @@ public class BillingProcessingService : IBillingProcessingService
         _logger.LogInformation("Completed billing {ProcessId}", billing.ProcessId);
     }
 
-    public async Task ProcessBrokerAsync(int brokerId, DateTime tradeDate, int processBillingId, CancellationToken ct)
+    public async Task ProcessBrokerAsync(int brokerId, DateOnly tradeDate, int processBillingId, CancellationToken ct)
     {
         _logger.LogDebug("Processing broker {BrokerId} for date {Date}", brokerId, tradeDate);
 
@@ -142,7 +142,7 @@ public class BillingProcessingService : IBillingProcessingService
     }
 
     private async Task<BrokerBillingContext> PreloadBrokerContextAsync(
-        int brokerId, DateTime tradeDate, CancellationToken ct)
+        int brokerId, DateOnly tradeDate, CancellationToken ct)
     {
         var bracketsTask = _bracketRepository.GetAllByBrokerAndDateAsync(brokerId, tradeDate, ct);
         var configsTask = _bmfConfigRepository.GetAllByBrokerAndDateAsync(brokerId, tradeDate, ct);

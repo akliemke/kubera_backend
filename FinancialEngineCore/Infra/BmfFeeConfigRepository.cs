@@ -20,7 +20,7 @@ public class BmfFeeConfigRepository
     public async Task<BmfFeeConfig?> GetApplicableConfigAsync(
         int brokerId,
         string trader,
-        DateTime tradeDate,
+        DateOnly tradeDate,
         CancellationToken cancellationToken)
     {
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
@@ -134,7 +134,7 @@ public class BmfFeeConfigRepository
     /// </summary>
     public async Task<IReadOnlyList<BmfFeeConfig>> GetAllByBrokerAndDateAsync(
         int brokerId,
-        DateTime tradeDate,
+        DateOnly tradeDate,
         CancellationToken cancellationToken)
     {
         const string sql = @"

@@ -15,8 +15,8 @@ public class BmfFeeConfig
     /// </summary>
     public string? Trader { get; set; }
 
-    public DateTime ValidFrom { get; set; }
-    public DateTime ValidTo { get; set; }
+    public DateOnly ValidFrom { get; set; }
+    public DateOnly ValidTo { get; set; }
 
     /// <summary>Valor por contrato Mini (WIN, WDO)</summary>
     public decimal ValorMini { get; set; }

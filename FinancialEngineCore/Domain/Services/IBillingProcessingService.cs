@@ -16,5 +16,5 @@ public interface IBillingProcessingService
     /// <summary>
     /// Processes billing for a single broker on a specific date.
     /// </summary>
-    Task ProcessBrokerAsync(int brokerId, DateTime tradeDate, int processBillingId, CancellationToken ct);
+    Task ProcessBrokerAsync(int brokerId, DateOnly tradeDate, int processBillingId, CancellationToken ct);
 }

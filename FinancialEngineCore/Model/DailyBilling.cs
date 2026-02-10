@@ -9,7 +9,7 @@ public class DailyBilling
 
     public int Broker { get; set; }
     public required string Trader { get; set; }
-    public DateTime TradeDate { get; set; }
+    public DateOnly TradeDate { get; set; }
 
     /// <summary>"EQUITY" ou "BMF"</summary>
     public required string AssetClass { get; set; }
