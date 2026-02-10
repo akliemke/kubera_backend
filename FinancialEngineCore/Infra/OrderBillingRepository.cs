@@ -82,6 +82,39 @@ public class OrderBillingRepository
     }
 
     /// <summary>
+    /// Busca order billings com dados da ordem (Symbol, Side) para um broker/mês.
+    /// </summary>
+    public async Task<List<OrderBillingDetail>> GetByBrokerAndMonthAsync(
+        int brokerId,
+        int year,
+        int month,
+        CancellationToken cancellationToken)
+    {
+        var monthStart = new DateOnly(year, month, 1);
+        var monthEnd = monthStart.AddMonths(1);
+
+        const string sql = @"
+            SELECT ob.OrderId, ob.Broker, ob.Trader, ob.TradeDate, ob.AssetClass,
+                   ob.Notional, ob.Qty, ob.FeeAmount,
+                   o.Symbol, o.Side
+            FROM financial_engine.order_billing ob
+            LEFT JOIN history.vw_billable_orders o ON o.Id = ob.OrderId
+                AND o.businessDate = to_char(ob.TradeDate, 'YYYY-MM-DD')
+            WHERE ob.Broker = @BrokerId
+              AND ob.TradeDate >= @MonthStart AND ob.TradeDate < @MonthEnd
+            ORDER BY ob.Trader, ob.AssetClass, ob.TradeDate, ob.OrderId";
+
+        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
+        var result = await conn.QueryAsync<OrderBillingDetail>(sql, new
+        {
+            BrokerId = brokerId,
+            MonthStart = monthStart,
+            MonthEnd = monthEnd
+        });
+        return result.ToList();
+    }
+
+    /// <summary>
     /// Deleta registros de um broker/dia específico (para reprocessamento).
     /// </summary>
     public async Task DeleteByDateAsync(

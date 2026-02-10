@@ -119,6 +119,18 @@ CREATE TABLE financial_engine.price_modification_factors (
     UpdatedAt TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE financial_engine.fixed_monthly_fees (
+    Id BIGSERIAL PRIMARY KEY,
+    Broker INT NOT NULL,
+    Description VARCHAR(200) NOT NULL,
+    Amount DECIMAL(18,2) NOT NULL,
+    ValidFrom DATE NOT NULL,
+    ValidTo DATE NOT NULL,
+    IsActive BOOLEAN NOT NULL DEFAULT TRUE,
+    CreatedAt TIMESTAMP NOT NULL DEFAULT NOW(),
+    UpdatedAt TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE financial_engine.entity_billing_configs (
     Id BIGSERIAL PRIMARY KEY,
     Broker INT NOT NULL,

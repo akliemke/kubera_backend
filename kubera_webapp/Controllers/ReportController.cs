@@ -1,4 +1,5 @@
 using FinancialEngineCore.Infra;
+using KuberaWebApp.Services;
 using System.Globalization;
 
 namespace KuberaWebApp.Controllers;
@@ -41,6 +42,50 @@ public static class ReportController
                     RecordCount = billings.Count
                 }
             });
+        });
+
+        // PDF must be registered BEFORE the generic /billing/month/{ano_mes}
+        // to avoid the catch-all route capturing the request
+        reportGroup.MapGet("/billing/month/{ano_mes}/broker/{brokerId:int}/pdf", async (
+            string ano_mes,
+            int brokerId,
+            DailyBillingRepository dailyBillingRepository,
+            OrderBillingRepository orderBillingRepository,
+            BrokerRepository brokerRepository,
+            FixedMonthlyFeeRepository fixedMonthlyFeeRepository,
+            MonthlyPdfReportService pdfService,
+            CancellationToken ct) =>
+        {
+            if (!DateTime.TryParseExact(ano_mes + "-01", "yyyy-MM-dd",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out var monthDate))
+            {
+                return Results.BadRequest("Formato invalido. Use yyyy-MM (ex: 2024-01).");
+            }
+
+            var year = monthDate.Year;
+            var month = monthDate.Month;
+
+            var summariesTask = dailyBillingRepository.GetFullMonthSummaryByBrokerAsync(brokerId, year, month, ct);
+            var ordersTask = orderBillingRepository.GetByBrokerAndMonthAsync(brokerId, year, month, ct);
+            var brokersTask = brokerRepository.GetAllAsync(ct);
+            var fixedFeesTask = fixedMonthlyFeeRepository.GetByBrokerAndMonthAsync(brokerId, year, month, ct);
+
+            await Task.WhenAll(summariesTask, ordersTask, brokersTask, fixedFeesTask);
+
+            var summaries = await summariesTask;
+            var orders = await ordersTask;
+            var broker = (await brokersTask).FirstOrDefault(b => b.Code == brokerId);
+            var fixedFees = await fixedFeesTask;
+
+            if (broker == null)
+                return Results.NotFound($"Corretora {brokerId} nao encontrada.");
+
+            if (summaries.Count == 0 && !fixedFees.Any())
+                return Results.NotFound($"Nenhum dado de billing para corretora {brokerId} em {ano_mes}.");
+
+            var pdfBytes = pdfService.Generate(broker, year, month, summaries, orders, fixedFees);
+
+            return Results.File(pdfBytes, "application/pdf", $"billing_{brokerId}_{ano_mes}.pdf");
         });
 
         reportGroup.MapGet("/billing/month/{ano_mes}", async (

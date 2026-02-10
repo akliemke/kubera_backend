@@ -6,8 +6,10 @@ using FinancialEngineCore.Domain.Strategies;
 using FinancialEngineCore.Infra;
 using HealthChecks.NpgSql;
 using KuberaWebApp.Controllers;
+using KuberaWebApp.Services;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using QuestPDF.Infrastructure;
 
 SqlMapper.AddTypeHandler(new DateOnlyTypeHandler());
 
@@ -45,6 +47,7 @@ builder.Services.AddSingleton<OrderBillingRepository>();
 builder.Services.AddSingleton<BracketFeeTrackingRepository>();
 builder.Services.AddSingleton<PriceModificationFactorRepository>();
 builder.Services.AddSingleton<EntityBillingConfigRepository>();
+builder.Services.AddSingleton<FixedMonthlyFeeRepository>();
 
 // Strategies
 builder.Services.AddSingleton<ICalculationStrategy, EquityCalculationStrategy>();
@@ -53,6 +56,7 @@ builder.Services.AddSingleton<CalculationStrategyRegistry>();
 
 // Services
 builder.Services.AddSingleton<IBillingProcessingService, BillingProcessingService>();
+builder.Services.AddSingleton<MonthlyPdfReportService>();
 
 // Background Worker
 builder.Services.AddHostedService<BillingWorker>();
@@ -60,6 +64,8 @@ builder.Services.AddHostedService<BillingWorker>();
 // Health Checks
 builder.Services.AddHealthChecks()
     .AddNpgSql(connectionString, name: "postgresql", tags: ["db", "database"]);
+
+QuestPDF.Settings.License = LicenseType.Community;
 
 var app = builder.Build();
 
@@ -72,6 +78,8 @@ app.MapEquityFeeBracketEndpoints();
 app.MapBmfFeeConfigEndpoints();
 app.MapPriceModificationFactorEndpoints();
 app.MapEntityBillingConfigEndpoints();
+app.MapFixedMonthlyFeeEndpoints();
+app.MapSeedDataEndpoints();
 
 app.MapGet("/", () => "Hello World!");
 

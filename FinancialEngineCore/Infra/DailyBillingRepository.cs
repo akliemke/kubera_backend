@@ -235,6 +235,40 @@ public class DailyBillingRepository
     }
 
     /// <summary>
+    /// Busca resumo do mês completo para um broker, agrupado por (Trader, AssetClass).
+    /// Usado para relatório PDF mensal.
+    /// </summary>
+    public async Task<List<TraderMonthSummary>> GetFullMonthSummaryByBrokerAsync(
+        int brokerId,
+        int year,
+        int month,
+        CancellationToken cancellationToken)
+    {
+        var monthStart = new DateOnly(year, month, 1);
+        var monthEnd = monthStart.AddMonths(1);
+
+        const string sql = @"
+            SELECT Trader, AssetClass,
+                   COALESCE(SUM(TotalNotional), 0) as TotalNotional,
+                   COALESCE(SUM(TotalQty), 0) as TotalQty,
+                   COALESCE(SUM(TotalFee), 0) as TotalFee
+            FROM financial_engine.daily_billing
+            WHERE Broker = @BrokerId
+              AND TradeDate >= @MonthStart
+              AND TradeDate < @MonthEnd
+            GROUP BY Trader, AssetClass";
+
+        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
+        var result = await conn.QueryAsync<TraderMonthSummary>(sql, new
+        {
+            BrokerId = brokerId,
+            MonthStart = monthStart,
+            MonthEnd = monthEnd
+        });
+        return result.ToList();
+    }
+
+    /// <summary>
     /// Busca resumo do mês inteiro para um broker até uma data (bulk).
     /// Retorna accumulated + fee per (Trader, AssetClass).
     /// </summary>
