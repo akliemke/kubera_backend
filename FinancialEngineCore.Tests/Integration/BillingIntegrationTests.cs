@@ -287,6 +287,46 @@ public class BillingIntegrationTests : IAsyncLifetime
     }
 
     // ==========================================
+    // Test 8: GTC/GTD uses daily trades, DAY uses CumQty/AvgPx
+    // ==========================================
+    [Fact]
+    public async Task GtcGtd_UsesTradesOfDay_DayUsesCumQty()
+    {
+        // Arrange: same trader, 1 GTC order + 1 DAY order
+        await SeedBroker();
+        await SeedDefaultEquityBrackets();
+
+        // GTC order: CumQty=1000 (accumulated over multiple days), AvgPx=50 (stale VWAP)
+        // But today only 200 shares were filled at price 55
+        await SeedOrder(1, 1000, 50, "TRADER1", "PETR4", "EQUITY", timeInForce: "GTC");
+        await SeedTrade(orderId: 1, lastQty: 200, lastPx: 55, "TRADER1", "PETR4", "EQUITY");
+
+        // DAY order: CumQty=300, AvgPx=100 (all fills are today by definition)
+        await SeedOrder(2, 300, 100, "TRADER1", "VALE3", "EQUITY");
+
+        var service = CreateService();
+
+        // Act
+        await service.ProcessBrokerAsync(BrokerId, _tradeDate, ProcessBillingId, CancellationToken.None);
+
+        // Assert
+        var billing = await GetDailyBilling("TRADER1", "EQUITY");
+        Assert.NotNull(billing);
+
+        // GTC notional from trades: 200 * 55 = 11,000
+        // DAY notional from order: 300 * 100 = 30,000
+        // Total: 41,000
+        Assert.Equal(41_000m, billing.TotalNotional);
+
+        // Fee: 41,000 * 0.00005 (bracket 1) = 2.05
+        Assert.Equal(2.05m, billing.TotalFee);
+
+        // 2 order billings (1 GTC + 1 DAY)
+        var orderBillings = await GetOrderBillings(billing.Id);
+        Assert.Equal(2, orderBillings.Count);
+    }
+
+    // ==========================================
     // Helper: Create service with real repositories
     // ==========================================
     private BillingProcessingService CreateService()
@@ -377,16 +417,16 @@ public class BillingIntegrationTests : IAsyncLifetime
     }
 
     private async Task SeedOrder(long id, decimal qty, decimal price, string trader, string symbol,
-        string assetClass, string? exchangeSymbol = null, string entity = "MESA1")
+        string assetClass, string? exchangeSymbol = null, string entity = "MESA1", string? timeInForce = null)
     {
         await using var conn = new NpgsqlConnection(_db.ConnectionString);
         await conn.OpenAsync();
         await conn.ExecuteAsync(@"
             INSERT INTO history.orders
                 (Id, CumQty, AvgPx, Symbol, ExchangeSymbol, AssetClass, EnteringTrader,
-                 Entity, TradeDate, EnteringFirm, OmsInstance, Side, businessDate)
+                 Entity, TradeDate, EnteringFirm, OmsInstance, Side, businessDate, TimeInForce)
             VALUES (@Id, @CumQty, @AvgPx, @Symbol, @ExchangeSymbol, @AssetClass, @EnteringTrader,
-                    @Entity, @TradeDate, @EnteringFirm, 'OMS1', 'BUY', @BusinessDate)",
+                    @Entity, @TradeDate, @EnteringFirm, 'OMS1', 'BUY', @BusinessDate, @TimeInForce)",
             new
             {
                 Id = id,
@@ -399,7 +439,8 @@ public class BillingIntegrationTests : IAsyncLifetime
                 Entity = entity,
                 TradeDate = _tradeDate,
                 EnteringFirm = BrokerId.ToString(),
-                BusinessDate = _tradeDate.ToString("yyyy-MM-dd")
+                BusinessDate = _tradeDate.ToString("yyyy-MM-dd"),
+                TimeInForce = timeInForce
             });
     }
 
@@ -464,6 +505,33 @@ public class BillingIntegrationTests : IAsyncLifetime
                 (Symbol, Factor, ValidFrom, ValidTo, IsActive)
             VALUES (@Symbol, @Factor, '2024-01-01', '2099-12-31', TRUE)",
             new { Symbol = symbol, Factor = factor });
+    }
+
+    private async Task SeedTrade(long orderId, decimal lastQty, decimal lastPx, string trader,
+        string symbol, string assetClass, string? exchangeSymbol = null, string entity = "MESA1")
+    {
+        await using var conn = new NpgsqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await conn.ExecuteAsync(@"
+            INSERT INTO history.trades
+                (OrderId, LastQty, LastPx, Symbol, ExchangeSymbol, AssetClass, EnteringTrader,
+                 Entity, TradeDate, EnteringFirm, OmsInstance, Side, businessDate)
+            VALUES (@OrderId, @LastQty, @LastPx, @Symbol, @ExchangeSymbol, @AssetClass, @EnteringTrader,
+                    @Entity, @TradeDate, @EnteringFirm, 'OMS1', 'BUY', @BusinessDate)",
+            new
+            {
+                OrderId = orderId,
+                LastQty = lastQty,
+                LastPx = lastPx,
+                Symbol = symbol,
+                ExchangeSymbol = exchangeSymbol ?? symbol,
+                AssetClass = assetClass,
+                EnteringTrader = trader,
+                Entity = entity,
+                TradeDate = _tradeDate,
+                EnteringFirm = BrokerId.ToString(),
+                BusinessDate = _tradeDate.ToString("yyyy-MM-dd")
+            });
     }
 
     // ==========================================

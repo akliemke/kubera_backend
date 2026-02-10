@@ -51,6 +51,7 @@ public class DatabaseFixture : IAsyncLifetime
             TRUNCATE financial_engine.price_modification_factors RESTART IDENTITY CASCADE;
             TRUNCATE financial_engine.entity_billing_configs RESTART IDENTITY CASCADE;
             TRUNCATE history.orders RESTART IDENTITY CASCADE;
+            TRUNCATE history.trades RESTART IDENTITY CASCADE;
             TRUNCATE management.brokers RESTART IDENTITY CASCADE;
         ");
     }
