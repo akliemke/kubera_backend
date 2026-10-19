@@ -47,7 +47,7 @@ public static class BmfFeeConfigController
                 c.ValidTo,
                 Mini = c.ValorMini,
                 Cheio = c.ValorCheio,
-                DI1 = new
+                Di1 = new
                 {
                     Venc1a4 = c.DI1Venc1a4,
                     Venc5 = c.DI1Venc5,
@@ -159,6 +159,26 @@ public static class BmfFeeConfigController
             if (validationErrors.Count > 0)
                 return Results.BadRequest(new { Errors = validationErrors });
 
+            var trader = string.IsNullOrWhiteSpace(request.Trader) ? null : request.Trader;
+
+            var siblings = await repository.GetByBrokerAsync(existing.Broker, ct);
+            var conflict = siblings.FirstOrDefault(c =>
+                c.Id != existing.Id &&
+                string.Equals(c.Trader, trader, StringComparison.OrdinalIgnoreCase) &&
+                c.ValidFrom <= request.ValidTo && request.ValidFrom <= c.ValidTo);
+
+            if (conflict is not null)
+                return Results.BadRequest(new
+                {
+                    Errors = new[]
+                    {
+                        trader is null
+                            ? "Já existe uma configuração padrão para este broker no período informado"
+                            : $"Já existe uma configuração para o trader {trader} neste broker no período informado"
+                    }
+                });
+
+            existing.Trader = trader;
             existing.ValidFrom = request.ValidFrom;
             existing.ValidTo = request.ValidTo;
             existing.ValorMini = request.ValorMini;
@@ -218,7 +238,7 @@ public static class BmfFeeConfigController
         if (request.DI1Venc8Plus < 0)
             errors.Add("DI1Venc8Plus deve ser maior ou igual a zero");
         if (request.CapMensal < 0)
-            errors.Add("CapMensal deve ser maior ou igual a zero");
+            errors.Add("CapMensal deve ser maior ou igual a zero (vazio = sem teto)");
         return errors;
     }
 
@@ -242,7 +262,7 @@ public static class BmfFeeConfigController
         if (request.DI1Venc8Plus < 0)
             errors.Add("DI1Venc8Plus deve ser maior ou igual a zero");
         if (request.CapMensal < 0)
-            errors.Add("CapMensal deve ser maior ou igual a zero");
+            errors.Add("CapMensal deve ser maior ou igual a zero (vazio = sem teto)");
         return errors;
     }
 }
@@ -259,10 +279,11 @@ public record CreateBmfFeeConfigRequest(
     decimal DI1Venc6,
     decimal DI1Venc7,
     decimal DI1Venc8Plus,
-    decimal CapMensal
+    decimal? CapMensal // NULL = sem teto
 );
 
 public record UpdateBmfFeeConfigRequest(
+    string? Trader,
     DateOnly ValidFrom,
     DateOnly ValidTo,
     decimal ValorMini,
@@ -272,7 +293,7 @@ public record UpdateBmfFeeConfigRequest(
     decimal DI1Venc6,
     decimal DI1Venc7,
     decimal DI1Venc8Plus,
-    decimal CapMensal
+    decimal? CapMensal // NULL = sem teto
 );
 
 public record CopyConfigToTraderRequest(int BrokerId, string Trader);

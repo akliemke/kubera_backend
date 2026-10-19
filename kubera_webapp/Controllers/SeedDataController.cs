@@ -45,7 +45,7 @@ public static class SeedDataController
             {
                 // 1. Ensure broker 935 exists
                 await conn.ExecuteAsync(@"
-                    INSERT INTO management.brokers (Code, Name, Document, Status, BillingCurrency, Contacts)
+                    INSERT INTO financial_engine.brokers (Code, Name, Document, Status, BillingCurrency, Contacts)
                     VALUES (935, 'Corretora B3 Teste', '93.500.000/0001-35', true, 'BRL', ARRAY['teste@b3.com.br'])
                     ON CONFLICT DO NOTHING", transaction: tx);
 

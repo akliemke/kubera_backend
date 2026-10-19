@@ -27,5 +27,6 @@ public class BracketFeeTracking
     public decimal AccumulatedFeeBefore { get; set; }
 
     /// <summary>CAP da faixa no momento do cálculo</summary>
-    public decimal BracketCap { get; set; }
+    /// <summary>CAP da faixa no momento do cálculo (NULL = sem teto)</summary>
+    public decimal? BracketCap { get; set; }
 }

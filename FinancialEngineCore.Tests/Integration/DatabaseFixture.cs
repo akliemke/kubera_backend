@@ -7,8 +7,8 @@ namespace FinancialEngineCore.Tests.Integration;
 
 public class DatabaseFixture : IAsyncLifetime
 {
-    private PostgreSqlContainer _container = null!;
-    public string ConnectionString => _container.GetConnectionString();
+    private PostgreSqlContainer? _container;
+    public string ConnectionString => _container!.GetConnectionString();
 
     public async Task InitializeAsync()
     {
@@ -26,7 +26,9 @@ public class DatabaseFixture : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        await _container.DisposeAsync();
+        // Null when StartAsync failed — don't mask the original error
+        if (_container is not null)
+            await _container.DisposeAsync();
     }
 
     private async Task RunInitScriptAsync()
@@ -50,9 +52,14 @@ public class DatabaseFixture : IAsyncLifetime
             TRUNCATE financial_engine.bmf_fee_configs RESTART IDENTITY CASCADE;
             TRUNCATE financial_engine.price_modification_factors RESTART IDENTITY CASCADE;
             TRUNCATE financial_engine.entity_billing_configs RESTART IDENTITY CASCADE;
+            TRUNCATE financial_engine.fixed_monthly_fees RESTART IDENTITY CASCADE;
+            TRUNCATE financial_engine.market_data_billing RESTART IDENTITY CASCADE;
+            TRUNCATE financial_engine.market_data_fee_configs RESTART IDENTITY CASCADE;
+            TRUNCATE financial_engine.market_data_exclusions RESTART IDENTITY CASCADE;
+            TRUNCATE financial_engine.user_exchange_account_snapshots;
             TRUNCATE history.orders RESTART IDENTITY CASCADE;
             TRUNCATE history.trades RESTART IDENTITY CASCADE;
-            TRUNCATE management.brokers RESTART IDENTITY CASCADE;
+            TRUNCATE financial_engine.brokers RESTART IDENTITY CASCADE;
         ");
     }
 }

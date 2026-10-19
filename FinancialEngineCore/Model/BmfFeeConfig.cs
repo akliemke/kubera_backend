@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace FinancialEngineCore.Model;
 
 /// <summary>
@@ -25,22 +27,27 @@ public class BmfFeeConfig
     public decimal ValorCheio { get; set; }
 
     /// <summary>Valor DI1 para 1º ao 4º vencimento</summary>
+    [JsonPropertyName("di1Venc1a4")]
     public decimal DI1Venc1a4 { get; set; }
 
     /// <summary>Valor DI1 para 5º vencimento</summary>
+    [JsonPropertyName("di1Venc5")]
     public decimal DI1Venc5 { get; set; }
 
     /// <summary>Valor DI1 para 6º vencimento</summary>
+    [JsonPropertyName("di1Venc6")]
     public decimal DI1Venc6 { get; set; }
 
     /// <summary>Valor DI1 para 7º vencimento</summary>
+    [JsonPropertyName("di1Venc7")]
     public decimal DI1Venc7 { get; set; }
 
     /// <summary>Valor DI1 para 8º vencimento em diante</summary>
+    [JsonPropertyName("di1Venc8Plus")]
     public decimal DI1Venc8Plus { get; set; }
 
-    /// <summary>CAP mensal único (engloba Mini + Cheio + DI1)</summary>
-    public decimal CapMensal { get; set; }
+    /// <summary>CAP mensal único (engloba Mini + Cheio + DI1). NULL = sem teto</summary>
+    public decimal? CapMensal { get; set; }
 
     public bool IsActive { get; set; }
 }

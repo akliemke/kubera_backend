@@ -51,13 +51,13 @@ public class EquityCalculationStrategy : ICalculationStrategy
     /// <param name="orders">Ordens do dia</param>
     /// <param name="brackets">Faixas de cobrança aplicáveis (ordenadas por NotionalFrom)</param>
     /// <param name="accumulatedBefore">Volume acumulado no mês até o dia anterior</param>
-    /// <param name="feeChargedPerBracket">Fee já cobrado em cada faixa no mês (para aplicar CAPs)</param>
+    /// <param name="feeChargedPerBracket">Fee já cobrado no mês por faixa, indexado pelo NotionalFrom da faixa (para aplicar CAPs)</param>
     /// <param name="priceFactors">Fatores de modificação de preço por símbolo (symbol → factor)</param>
     public static BillingCalculationResult Calculate(
         IReadOnlyList<Order> orders,
         IReadOnlyList<EquityFeeBracket> brackets,
         decimal accumulatedBefore,
-        IReadOnlyDictionary<long, decimal> feeChargedPerBracket,
+        IReadOnlyDictionary<decimal, decimal> feeChargedPerBracket,
         IReadOnlyDictionary<string, decimal> priceFactors,
         string? billingKey = null,
         int? brokerId = null)
@@ -78,7 +78,7 @@ public class EquityCalculationStrategy : ICalculationStrategy
             feeChargedPerBracket);
 
         // Distribuir fee proporcionalmente entre as ordens
-        var orderFees = DistributeFeeProportionally(orders, totalNotional, totalFee, priceFactors);
+        var orderFees = DistributeFeeProportionally(orders, totalFee, priceFactors);
 
         return new BillingCalculationResult
         {
@@ -99,12 +99,13 @@ public class EquityCalculationStrategy : ICalculationStrategy
 
     /// <summary>
     /// Calcula o fee progressivo atravessando as faixas, retornando também o breakdown por faixa.
+    /// Volume que cai fora de qualquer faixa (lacunas ou abaixo da primeira faixa) não é cobrado.
     /// </summary>
     private static (decimal TotalFee, List<BracketFeeResult> BracketFees) CalculateProgressiveFeeWithBreakdown(
         decimal accumulatedBefore,
         decimal dayNotional,
         IReadOnlyList<EquityFeeBracket> brackets,
-        IReadOnlyDictionary<long, decimal> feeChargedPerBracket)
+        IReadOnlyDictionary<decimal, decimal> feeChargedPerBracket)
     {
         var bracketFees = new List<BracketFeeResult>();
 
@@ -125,9 +126,19 @@ public class EquityCalculationStrategy : ICalculationStrategy
             if (currentPosition >= bracketEnd)
                 continue;
 
+            // Volume entre a posição atual e o início da faixa não pertence a nenhuma faixa: não cobrado
+            if (currentPosition < bracket.NotionalFrom)
+            {
+                var gap = Math.Min(remainingNotional, bracket.NotionalFrom - currentPosition);
+                currentPosition += gap;
+                remainingNotional -= gap;
+
+                if (remainingNotional <= 0)
+                    break;
+            }
+
             // Calcular quanto do notional cai nesta faixa
-            var bracketStart = Math.Max(bracket.NotionalFrom, currentPosition);
-            var notionalInBracket = Math.Min(remainingNotional, bracketEnd - bracketStart);
+            var notionalInBracket = Math.Min(remainingNotional, bracketEnd - currentPosition);
 
             if (notionalInBracket <= 0)
                 continue;
@@ -136,10 +147,11 @@ public class EquityCalculationStrategy : ICalculationStrategy
             var bpsRate = bracket.Bps / 10000m; // Converter BPS para taxa decimal
             var calculatedFee = notionalInBracket * bpsRate;
 
-            // Aplicar CAP da faixa
-            var feeAlreadyCharged = feeChargedPerBracket.GetValueOrDefault(bracket.Id, 0);
-            var capRemaining = Math.Max(0, bracket.Cap - feeAlreadyCharged);
-            var feeToCharge = Math.Min(calculatedFee, capRemaining);
+            // Aplicar CAP da faixa (NULL = sem teto)
+            var feeAlreadyCharged = feeChargedPerBracket.GetValueOrDefault(bracket.NotionalFrom, 0);
+            var feeToCharge = bracket.Cap is { } cap
+                ? Math.Min(calculatedFee, Math.Max(0, cap - feeAlreadyCharged))
+                : calculatedFee;
 
             // Registrar breakdown da faixa
             bracketFees.Add(new BracketFeeResult
@@ -161,35 +173,22 @@ public class EquityCalculationStrategy : ICalculationStrategy
     }
 
     /// <summary>
-    /// Distribui o fee total proporcionalmente entre as ordens.
+    /// Distribui o fee total proporcionalmente ao notional das ordens (Σ ordens = fee do dia em centavos).
     /// </summary>
     private static List<OrderFeeResult> DistributeFeeProportionally(
         IReadOnlyList<Order> orders,
-        decimal totalNotional,
         decimal totalFee,
         IReadOnlyDictionary<string, decimal> priceFactors)
     {
-        if (totalNotional == 0)
-        {
-            return orders.Select(o => new OrderFeeResult
-            {
-                OrderId = o.Id,
-                Notional = GetAdjustedNotional(o, priceFactors),
-                Qty = 0,
-                FeeAmount = 0
-            }).ToList();
-        }
+        var notionals = orders.Select(o => GetAdjustedNotional(o, priceFactors)).ToList();
+        var fees = FeeDistribution.Distribute(notionals, totalFee);
 
-        return orders.Select(o =>
+        return orders.Select((o, i) => new OrderFeeResult
         {
-            var adjustedNotional = GetAdjustedNotional(o, priceFactors);
-            return new OrderFeeResult
-            {
-                OrderId = o.Id,
-                Notional = adjustedNotional,
-                Qty = 0,
-                FeeAmount = Math.Round((adjustedNotional / totalNotional) * totalFee, 2)
-            };
+            OrderId = o.Id,
+            Notional = notionals[i],
+            Qty = 0,
+            FeeAmount = fees[i]
         }).ToList();
     }
 

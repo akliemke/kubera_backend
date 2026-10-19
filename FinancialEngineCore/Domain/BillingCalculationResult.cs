@@ -33,6 +33,9 @@ public class BillingCalculationResult
 
     /// <summary>Fee cobrado por faixa (apenas EQUITY)</summary>
     public List<BracketFeeResult> BracketFees { get; init; } = new();
+
+    /// <summary>Símbolos BMF não classificados (cobrados como zero)</summary>
+    public List<string> UnknownSymbols { get; init; } = new();
 }
 
 /// <summary>
@@ -56,5 +59,7 @@ public class BracketFeeResult
     public decimal CalculatedFee { get; init; }
     public decimal ChargedFee { get; init; }
     public decimal AccumulatedFeeBefore { get; init; }
-    public decimal BracketCap { get; init; }
+
+    /// <summary>CAP da faixa (NULL = sem teto)</summary>
+    public decimal? BracketCap { get; init; }
 }

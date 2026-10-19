@@ -28,7 +28,7 @@ if (string.IsNullOrEmpty(connectionString))
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAngular",
-        builder => builder.WithOrigins("http://localhost:4200")
+        builder => builder.WithOrigins("http://localhost:4200").WithOrigins("http://127.0.0.1:49152")
                           .AllowAnyMethod()
                           .AllowAnyHeader());
 });
@@ -48,6 +48,19 @@ builder.Services.AddSingleton<BracketFeeTrackingRepository>();
 builder.Services.AddSingleton<PriceModificationFactorRepository>();
 builder.Services.AddSingleton<EntityBillingConfigRepository>();
 builder.Services.AddSingleton<FixedMonthlyFeeRepository>();
+builder.Services.AddSingleton<UserExchangeAccountSnapshotRepository>();
+builder.Services.AddSingleton<MarketDataFeeConfigRepository>();
+builder.Services.AddSingleton<MarketDataExclusionRepository>();
+builder.Services.AddSingleton<MarketDataBillingRepository>();
+
+// External API: users with accounts linked to each broker (Market Data billing)
+builder.Services.AddHttpClient<UserExchangeAccountApiClient>(client =>
+{
+    var baseUrl = builder.Configuration["UserExchangeAccountsApi:BaseUrl"];
+    if (!string.IsNullOrWhiteSpace(baseUrl))
+        client.BaseAddress = new Uri(baseUrl.EndsWith('/') ? baseUrl : baseUrl + "/");
+    client.Timeout = TimeSpan.FromSeconds(60);
+});
 
 // Strategies
 builder.Services.AddSingleton<ICalculationStrategy, EquityCalculationStrategy>();
@@ -55,17 +68,34 @@ builder.Services.AddSingleton<ICalculationStrategy, BmfCalculationStrategy>();
 builder.Services.AddSingleton<CalculationStrategyRegistry>();
 
 // Services
+builder.Services.AddSingleton<MarketDataService>();
 builder.Services.AddSingleton<IBillingProcessingService, BillingProcessingService>();
 builder.Services.AddSingleton<MonthlyPdfReportService>();
+builder.Services.AddSingleton<RevenueReportService>();
 
 // Background Worker
 builder.Services.AddHostedService<BillingWorker>();
+builder.Services.AddHostedService<UserExchangeAccountSyncWorker>();
 
 // Health Checks
 builder.Services.AddHealthChecks()
     .AddNpgSql(connectionString, name: "postgresql", tags: ["db", "database"]);
 
 QuestPDF.Settings.License = LicenseType.Community;
+
+//builder.Services.AddCors(options =>
+//{
+//    options.AddPolicy("DevCors", policy =>
+//    {
+//        policy
+//            .WithOrigins(
+//                "http://127.0.0.1:49152",
+//                "http://localhost:49152"
+//            )
+//            .AllowAnyHeader()
+//            .AllowAnyMethod();
+//    });
+//});
 
 var app = builder.Build();
 
@@ -79,6 +109,7 @@ app.MapBmfFeeConfigEndpoints();
 app.MapPriceModificationFactorEndpoints();
 app.MapEntityBillingConfigEndpoints();
 app.MapFixedMonthlyFeeEndpoints();
+app.MapMarketDataEndpoints();
 app.MapSeedDataEndpoints();
 
 app.MapGet("/", () => "Hello World!");

@@ -51,9 +51,9 @@ public class EntityBillingConfigRepository
     {
         const string sql = @"
             INSERT INTO financial_engine.entity_billing_configs
-                (Broker, Entity, ValidFrom, ValidTo, IsActive)
+                (Broker, Entity, ValidFrom, ValidTo, IsActive, FloorFee)
             VALUES
-                (@Broker, @Entity, @ValidFrom, @ValidTo, @IsActive)
+                (@Broker, @Entity, @ValidFrom, @ValidTo, @IsActive, @FloorFee)
             RETURNING *";
 
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
@@ -65,12 +65,48 @@ public class EntityBillingConfigRepository
         const string sql = @"
             UPDATE financial_engine.entity_billing_configs
             SET Broker = @Broker, Entity = @Entity, ValidFrom = @ValidFrom,
-                ValidTo = @ValidTo, IsActive = @IsActive, UpdatedAt = NOW()
+                ValidTo = @ValidTo, IsActive = @IsActive, FloorFee = @FloorFee,
+                UpdatedAt = NOW()
             WHERE Id = @Id";
 
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
         var rows = await conn.ExecuteAsync(sql, config);
         return rows > 0;
+    }
+
+    public async Task<IEnumerable<EntityBillingConfig>> GetByBrokerAndMonthAsync(
+        int brokerId, int year, int month, CancellationToken cancellationToken)
+    {
+        var firstDay = new DateOnly(year, month, 1);
+        var lastDay = firstDay.AddMonths(1).AddDays(-1);
+
+        const string sql = @"
+            SELECT * FROM financial_engine.entity_billing_configs
+            WHERE Broker = @BrokerId
+              AND IsActive = TRUE
+              AND ValidFrom <= @LastDay
+              AND ValidTo >= @FirstDay
+            ORDER BY Entity";
+
+        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
+        return await conn.QueryAsync<EntityBillingConfig>(sql, new { BrokerId = brokerId, FirstDay = firstDay, LastDay = lastDay });
+    }
+
+    /// <summary>
+    /// Configs de todos os brokers com vigência que toca o período [firstDay, lastDay].
+    /// </summary>
+    public async Task<IEnumerable<EntityBillingConfig>> GetByPeriodAsync(
+        DateOnly firstDay, DateOnly lastDay, CancellationToken cancellationToken)
+    {
+        const string sql = @"
+            SELECT * FROM financial_engine.entity_billing_configs
+            WHERE IsActive = TRUE
+              AND ValidFrom <= @LastDay
+              AND ValidTo >= @FirstDay
+            ORDER BY Broker, Entity";
+
+        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
+        return await conn.QueryAsync<EntityBillingConfig>(sql, new { FirstDay = firstDay, LastDay = lastDay });
     }
 
     public async Task<bool> DeactivateAsync(long id, CancellationToken cancellationToken)

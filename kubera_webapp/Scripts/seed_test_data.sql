@@ -4,11 +4,11 @@
 -- ============================================
 
 -- Garante brokers existem
-INSERT INTO management.brokers (Code, Name, Document, Status, BillingCurrency, Contacts)
+INSERT INTO financial_engine.brokers (Code, Name, Document, Status, BillingCurrency, Contacts)
 VALUES (1, 'BTG Pactual', '11.111.111/0001-11', true, 'BRL', ARRAY['btg@test.com'])
 ON CONFLICT DO NOTHING;
 
-INSERT INTO management.brokers (Code, Name, Document, Status, BillingCurrency, Contacts)
+INSERT INTO financial_engine.brokers (Code, Name, Document, Status, BillingCurrency, Contacts)
 VALUES (3, 'XP Investimentos', '33.333.333/0001-33', true, 'BRL', ARRAY['xp@test.com'])
 ON CONFLICT DO NOTHING;
 
@@ -229,8 +229,13 @@ VALUES
 -- ============================================
 -- Process billing entries (referenciados acima)
 -- ============================================
-INSERT INTO management.process_billing (ProcessId, ProcessDate, Status, ProcessBroker)
+INSERT INTO financial_engine.process_billing (ProcessId, ProcessDate, Status, ProcessBroker)
 VALUES
 (1, '2026-01-06', 'COMPLETED', '1'),
 (2, '2026-01-06', 'COMPLETED', '3')
 ON CONFLICT DO NOTHING;
+
+-- IDs explicitos nao avancam a identity: realinha para o proximo INSERT nao colidir
+SELECT setval(
+    pg_get_serial_sequence('financial_engine.process_billing', 'processid'),
+    (SELECT MAX(ProcessId) FROM financial_engine.process_billing));

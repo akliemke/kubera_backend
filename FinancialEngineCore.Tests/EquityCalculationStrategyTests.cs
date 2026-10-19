@@ -42,7 +42,7 @@ public class EquityCalculationStrategyTests
         // Arrange: 10M notional, should be charged at 0.5 bps
         var orders = new List<Order> { CreateOrder(100_000, 100) }; // 10M notional
         var brackets = CreateDefaultBrackets();
-        var feePerBracket = new Dictionary<long, decimal>();
+        var feePerBracket = new Dictionary<decimal, decimal>();
 
         // Act
         var result = EquityCalculationStrategy.Calculate(orders, brackets, 0, feePerBracket, NoPriceFactors);
@@ -60,7 +60,7 @@ public class EquityCalculationStrategyTests
         // Arrange: 50M notional at 0.5 bps = 2500, but CAP is 2100
         var orders = new List<Order> { CreateOrder(500_000, 100) }; // 50M notional
         var brackets = CreateDefaultBrackets();
-        var feePerBracket = new Dictionary<long, decimal>();
+        var feePerBracket = new Dictionary<decimal, decimal>();
 
         // Act
         var result = EquityCalculationStrategy.Calculate(orders, brackets, 0, feePerBracket, NoPriceFactors);
@@ -80,7 +80,7 @@ public class EquityCalculationStrategyTests
         // Total: 2100 + 4500 + 1750 = 8350
         var orders = new List<Order> { CreateOrder(2_000_000, 100) }; // 200M notional
         var brackets = CreateDefaultBrackets();
-        var feePerBracket = new Dictionary<long, decimal>();
+        var feePerBracket = new Dictionary<decimal, decimal>();
 
         // Act
         var result = EquityCalculationStrategy.Calculate(orders, brackets, 0, feePerBracket, NoPriceFactors);
@@ -100,7 +100,7 @@ public class EquityCalculationStrategyTests
         // Total: 500 + 900 = 1400
         var orders = new List<Order> { CreateOrder(300_000, 100) }; // 30M notional
         var brackets = CreateDefaultBrackets();
-        var feePerBracket = new Dictionary<long, decimal>();
+        var feePerBracket = new Dictionary<decimal, decimal>();
 
         // Act
         var result = EquityCalculationStrategy.Calculate(orders, brackets, 40_000_000m, feePerBracket, NoPriceFactors);
@@ -122,7 +122,7 @@ public class EquityCalculationStrategyTests
         // Total: 100 + 900 = 1000
         var orders = new List<Order> { CreateOrder(300_000, 100) }; // 30M notional
         var brackets = CreateDefaultBrackets();
-        var feePerBracket = new Dictionary<long, decimal> { { 1, 2000m } };
+        var feePerBracket = new Dictionary<decimal, decimal> { { 0m, 2000m } };
 
         // Act
         var result = EquityCalculationStrategy.Calculate(orders, brackets, 40_000_000m, feePerBracket, NoPriceFactors);
@@ -144,7 +144,7 @@ public class EquityCalculationStrategyTests
             CreateOrder(50_000, 100), // 5M
         };
         var brackets = CreateDefaultBrackets();
-        var feePerBracket = new Dictionary<long, decimal>();
+        var feePerBracket = new Dictionary<decimal, decimal>();
 
         // Act
         var result = EquityCalculationStrategy.Calculate(orders, brackets, 0, feePerBracket, NoPriceFactors);
@@ -170,7 +170,7 @@ public class EquityCalculationStrategyTests
             CreateOrder(20_000, 100), // 2M
         };
         var brackets = CreateDefaultBrackets();
-        var feePerBracket = new Dictionary<long, decimal>();
+        var feePerBracket = new Dictionary<decimal, decimal>();
 
         // Act
         var result = EquityCalculationStrategy.Calculate(orders, brackets, 0, feePerBracket, NoPriceFactors);
@@ -188,7 +188,7 @@ public class EquityCalculationStrategyTests
         // Arrange
         var orders = new List<Order> { CreateOrder(100_000, 100) };
         var brackets = new List<EquityFeeBracket>();
-        var feePerBracket = new Dictionary<long, decimal>();
+        var feePerBracket = new Dictionary<decimal, decimal>();
 
         // Act
         var result = EquityCalculationStrategy.Calculate(orders, brackets, 0, feePerBracket, NoPriceFactors);
@@ -209,7 +209,7 @@ public class EquityCalculationStrategyTests
         // Total: 2100 + 4500 + 12250 + 3000 = 21850
         var orders = new List<Order> { CreateOrder(6_000_000, 100) }; // 600M notional
         var brackets = CreateDefaultBrackets();
-        var feePerBracket = new Dictionary<long, decimal>();
+        var feePerBracket = new Dictionary<decimal, decimal>();
 
         // Act
         var result = EquityCalculationStrategy.Calculate(orders, brackets, 0, feePerBracket, NoPriceFactors);
@@ -225,7 +225,7 @@ public class EquityCalculationStrategyTests
         // Arrange: 200M notional crossing 3 brackets
         var orders = new List<Order> { CreateOrder(2_000_000, 100) }; // 200M notional
         var brackets = CreateDefaultBrackets();
-        var feePerBracket = new Dictionary<long, decimal>();
+        var feePerBracket = new Dictionary<decimal, decimal>();
 
         // Act
         var result = EquityCalculationStrategy.Calculate(orders, brackets, 0, feePerBracket, NoPriceFactors);
@@ -259,7 +259,7 @@ public class EquityCalculationStrategyTests
         // Arrange: Already charged 2000 in bracket 1, now trading more
         var orders = new List<Order> { CreateOrder(300_000, 100) }; // 30M notional
         var brackets = CreateDefaultBrackets();
-        var feePerBracket = new Dictionary<long, decimal> { { 1, 2000m } };
+        var feePerBracket = new Dictionary<decimal, decimal> { { 0m, 2000m } };
 
         // Act
         var result = EquityCalculationStrategy.Calculate(orders, brackets, 40_000_000m, feePerBracket, NoPriceFactors);
@@ -288,7 +288,7 @@ public class EquityCalculationStrategyTests
         // Arrange
         var orders = new List<Order> { CreateOrder(100_000, 100) };
         var brackets = new List<EquityFeeBracket>();
-        var feePerBracket = new Dictionary<long, decimal>();
+        var feePerBracket = new Dictionary<decimal, decimal>();
 
         // Act
         var result = EquityCalculationStrategy.Calculate(orders, brackets, 0, feePerBracket, NoPriceFactors);
@@ -303,7 +303,7 @@ public class EquityCalculationStrategyTests
         // Arrange: Any volume that crosses multiple brackets
         var orders = new List<Order> { CreateOrder(6_000_000, 100) }; // 600M notional
         var brackets = CreateDefaultBrackets();
-        var feePerBracket = new Dictionary<long, decimal>();
+        var feePerBracket = new Dictionary<decimal, decimal>();
 
         // Act
         var result = EquityCalculationStrategy.Calculate(orders, brackets, 0, feePerBracket, NoPriceFactors);
@@ -332,7 +332,7 @@ public class EquityCalculationStrategyTests
         // Fee at 0.5 bps on 1M = 1M × 0.00005 = 50
         var orders = new List<Order> { CreateOrder(100_000, 100, symbol: "AZUL54") };
         var brackets = CreateDefaultBrackets();
-        var feePerBracket = new Dictionary<long, decimal>();
+        var feePerBracket = new Dictionary<decimal, decimal>();
         var priceFactors = new Dictionary<string, decimal> { { "AZUL54", 10m } };
 
         // Act
@@ -362,7 +362,7 @@ public class EquityCalculationStrategyTests
             CreateOrder(100_000, 100, symbol: "PETR4"),
         };
         var brackets = CreateDefaultBrackets();
-        var feePerBracket = new Dictionary<long, decimal>();
+        var feePerBracket = new Dictionary<decimal, decimal>();
         var priceFactors = new Dictionary<string, decimal> { { "AZUL54", 10m } };
 
         // Act
@@ -397,7 +397,7 @@ public class EquityCalculationStrategyTests
             CreateOrder(100_000, 100, symbol: "AZUL54"),
         };
         var brackets = CreateDefaultBrackets();
-        var feePerBracket = new Dictionary<long, decimal>();
+        var feePerBracket = new Dictionary<decimal, decimal>();
         var priceFactors = new Dictionary<string, decimal> { { "AZUL54", 10m } };
 
         // Act
@@ -408,5 +408,95 @@ public class EquityCalculationStrategyTests
         Assert.Equal(150m, result.TotalFee);
         Assert.Equal(100m, result.OrderFees[0].FeeAmount);
         Assert.Equal(50m, result.OrderFees[1].FeeAmount);
+    }
+
+    [Fact]
+    public void Calculate_NullCap_ChargesWithoutCeiling()
+    {
+        // 50M in bracket 1: 2500 calculated; CAP NULL = no ceiling
+        var orders = new List<Order> { CreateOrder(500_000, 100) };
+        var brackets = CreateDefaultBrackets();
+        brackets[0].Cap = null;
+
+        var result = EquityCalculationStrategy.Calculate(orders, brackets, 0, new Dictionary<decimal, decimal>(), NoPriceFactors);
+
+        Assert.Equal(2500m, result.TotalFee);
+        Assert.Null(result.BracketFees.Single().BracketCap);
+    }
+
+    [Fact]
+    public void Calculate_ZeroCap_ChargesNothingInBracket()
+    {
+        var orders = new List<Order> { CreateOrder(100_000, 100) }; // 10M
+        var brackets = CreateDefaultBrackets();
+        brackets[0].Cap = 0;
+
+        var result = EquityCalculationStrategy.Calculate(orders, brackets, 0, new Dictionary<decimal, decimal>(), NoPriceFactors);
+
+        Assert.Equal(0m, result.TotalFee);
+    }
+
+    [Fact]
+    public void Calculate_FirstBracketStartsAboveZero_VolumeBelowIsNotCharged()
+    {
+        // Only bracket: 10M+ at 0.5 bps, no cap. Day volume 30M from zero -> only 20M charged
+        var brackets = new List<EquityFeeBracket>
+        {
+            new() { Id = 1, NotionalFrom = 10_000_000, NotionalTo = null, Bps = 0.5m, Cap = null }
+        };
+        var orders = new List<Order> { CreateOrder(300_000, 100) };
+
+        var result = EquityCalculationStrategy.Calculate(orders, brackets, 0, new Dictionary<decimal, decimal>(), NoPriceFactors);
+
+        Assert.Equal(1000m, result.TotalFee); // 20M * 0.00005
+        Assert.Equal(20_000_000m, result.BracketFees.Single().NotionalInBracket);
+    }
+
+    [Fact]
+    public void Calculate_GapBetweenBrackets_GapVolumeNotCharged_PositionAdvances()
+    {
+        // [0,50M) 0.5bps, gap [50M,60M), [60M,+) 0.3bps; day volume 100M from zero
+        var brackets = new List<EquityFeeBracket>
+        {
+            new() { Id = 1, NotionalFrom = 0, NotionalTo = 50_000_000, Bps = 0.5m, Cap = null },
+            new() { Id = 2, NotionalFrom = 60_000_000, NotionalTo = null, Bps = 0.3m, Cap = null }
+        };
+        var orders = new List<Order> { CreateOrder(1_000_000, 100) };
+
+        var result = EquityCalculationStrategy.Calculate(orders, brackets, 0, new Dictionary<decimal, decimal>(), NoPriceFactors);
+
+        // 50M * 0.00005 = 2500 ; 40M (60M..100M) * 0.00003 = 1200
+        Assert.Equal(3700m, result.TotalFee);
+        Assert.Equal(40_000_000m, result.BracketFees.Single(b => b.BracketId == 2).NotionalInBracket);
+    }
+
+    [Fact]
+    public void Calculate_FeeChargedKeyedByNotionalFrom_CapSurvivesNewBracketVersion()
+    {
+        // Bracket version changed mid-month (new Id 99) but same range start: CAP consumption carries over
+        var brackets = CreateDefaultBrackets();
+        brackets[0].Id = 99;
+        var orders = new List<Order> { CreateOrder(100_000, 100) }; // 10M -> 500 calculated
+        var feePerBracket = new Dictionary<decimal, decimal> { { 0m, 2000m } };
+
+        var result = EquityCalculationStrategy.Calculate(orders, brackets, 20_000_000m, feePerBracket, NoPriceFactors);
+
+        Assert.Equal(100m, result.TotalFee); // CAP 2100 - 2000 already charged
+    }
+
+    [Fact]
+    public void Calculate_OrderFeesSumToRoundedTotal()
+    {
+        // Three orders splitting 500.00 unevenly by notional: per-order rounding alone would not close
+        var orders = new List<Order>
+        {
+            CreateOrder(33_333.3333m, 100),
+            CreateOrder(33_333.3333m, 100),
+            CreateOrder(33_333.3334m, 100)
+        };
+
+        var result = EquityCalculationStrategy.Calculate(orders, CreateDefaultBrackets(), 0, new Dictionary<decimal, decimal>(), NoPriceFactors);
+
+        Assert.Equal(Math.Round(result.TotalFee, 2), result.OrderFees.Sum(o => o.FeeAmount));
     }
 }

@@ -15,7 +15,7 @@ public class ProcessBillingRepository
     public async Task<List<ProcessBilling>> GetPendingAsync(CancellationToken cancellationToken)
     {
         const string sql = @"
-            SELECT * FROM management.process_billing
+            SELECT * FROM financial_engine.process_billing
             WHERE Status = 'Pending'
             ORDER BY ProcessId";
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
@@ -31,10 +31,10 @@ public class ProcessBillingRepository
     public async Task<ProcessBilling?> TryAcquireNextAsync(CancellationToken cancellationToken)
     {
         const string sql = @"
-            UPDATE management.process_billing
+            UPDATE financial_engine.process_billing
             SET Status = 'Processing', LockedAt = NOW()
             WHERE ProcessId = (
-                SELECT ProcessId FROM management.process_billing
+                SELECT ProcessId FROM financial_engine.process_billing
                 WHERE Status = 'Pending'
                 ORDER BY ProcessId
                 FOR UPDATE SKIP LOCKED
@@ -48,23 +48,26 @@ public class ProcessBillingRepository
 
     public async Task<ProcessBilling?> GetByIdAsync(int id, CancellationToken cancellationToken)
     {
-        const string sql = "SELECT * FROM management.process_billing WHERE ProcessId = @Id";
+        const string sql = "SELECT * FROM financial_engine.process_billing WHERE ProcessId = @Id";
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
         var billing = await conn.QueryFirstOrDefaultAsync<ProcessBilling>(sql, new { Id = id });
         return billing;
     }
 
-    public async Task SaveAsync(ProcessBilling processBilling, CancellationToken cancellationToken)
+    public async Task<int> SaveAsync(ProcessBilling processBilling, CancellationToken cancellationToken)
     {
-        const string sql = @"INSERT INTO management.process_billing (ProcessId, ProcessDate, Status, ProcessBroker)
-                             VALUES (@ProcessId, @ProcessDate, @Status, @ProcessBroker)";
+        const string sql = @"INSERT INTO financial_engine.process_billing (ProcessDate, Status, ProcessBroker)
+                             VALUES (@ProcessDate, @Status, @ProcessBroker)
+                             RETURNING ProcessId";
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
-        await conn.ExecuteAsync(sql, processBilling);
+        var id = await conn.ExecuteScalarAsync<int>(sql, processBilling);
+        processBilling.ProcessId = id;
+        return id;
     }
 
     public async Task UpdateAsync(ProcessBilling processBilling, CancellationToken cancellationToken)
     {
-        const string sql = @"UPDATE management.process_billing
+        const string sql = @"UPDATE financial_engine.process_billing
                              SET ProcessDate = @ProcessDate, Status = @Status, ProcessBroker = @ProcessBroker
                              WHERE ProcessId = @ProcessId";
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
@@ -74,7 +77,7 @@ public class ProcessBillingRepository
     public async Task<List<ProcessBilling>> GetRecentAsync(CancellationToken cancellationToken)
     {
         const string sql = @"
-            SELECT * FROM management.process_billing
+            SELECT * FROM financial_engine.process_billing
             ORDER BY ProcessId DESC
             LIMIT 50";
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);

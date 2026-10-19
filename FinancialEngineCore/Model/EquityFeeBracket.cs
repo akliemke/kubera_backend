@@ -27,8 +27,8 @@ public class EquityFeeBracket
     /// <summary>Basis points (ex: 0.5 bps = 0.00005)</summary>
     public decimal Bps { get; set; }
 
-    /// <summary>Teto máximo de cobrança nesta faixa</summary>
-    public decimal Cap { get; set; }
+    /// <summary>Teto máximo de cobrança nesta faixa no mês (NULL = sem teto)</summary>
+    public decimal? Cap { get; set; }
 
     public bool IsActive { get; set; }
 }

@@ -1,6 +1,8 @@
 using System.Data;
 using Dapper;
 using FinancialEngineCore.Model;
+using Npgsql;
+using NpgsqlTypes;
 
 namespace FinancialEngineCore.Infra;
 
@@ -33,22 +35,38 @@ public class OrderBillingRepository
     }
 
     /// <summary>
-    /// Insere múltiplos registros de billing por ordem (transactional overload).
+    /// Insere múltiplos registros de billing por ordem via binary COPY (1 round-trip).
+    /// Participa da transação aberta na conexão.
     /// </summary>
-    public async Task InsertBatchAsync(
-        IEnumerable<OrderBilling> orderBillings,
-        IDbConnection conn,
-        IDbTransaction txn)
+    public async Task CopyAsync(
+        IReadOnlyList<OrderBilling> orderBillings,
+        NpgsqlConnection conn,
+        CancellationToken cancellationToken)
     {
-        const string sql = @"
-            INSERT INTO financial_engine.order_billing
+        if (orderBillings.Count == 0)
+            return;
+
+        const string copy = @"
+            COPY financial_engine.order_billing
                 (OrderId, DailyBillingId, Broker, Trader, TradeDate,
                  AssetClass, Notional, Qty, FeeAmount)
-            VALUES
-                (@OrderId, @DailyBillingId, @Broker, @Trader, @TradeDate,
-                 @AssetClass, @Notional, @Qty, @FeeAmount)";
+            FROM STDIN (FORMAT BINARY)";
 
-        await conn.ExecuteAsync(sql, orderBillings, transaction: txn);
+        await using var writer = await conn.BeginBinaryImportAsync(copy, cancellationToken);
+        foreach (var ob in orderBillings)
+        {
+            await writer.StartRowAsync(cancellationToken);
+            await writer.WriteAsync(ob.OrderId, NpgsqlDbType.Bigint, cancellationToken);
+            await writer.WriteAsync(ob.DailyBillingId, NpgsqlDbType.Bigint, cancellationToken);
+            await writer.WriteAsync(ob.Broker, NpgsqlDbType.Integer, cancellationToken);
+            await writer.WriteAsync(ob.Trader, NpgsqlDbType.Varchar, cancellationToken);
+            await writer.WriteAsync(ob.TradeDate, NpgsqlDbType.Date, cancellationToken);
+            await writer.WriteAsync(ob.AssetClass, NpgsqlDbType.Varchar, cancellationToken);
+            await writer.WriteAsync(ob.Notional, NpgsqlDbType.Numeric, cancellationToken);
+            await writer.WriteAsync(ob.Qty, NpgsqlDbType.Numeric, cancellationToken);
+            await writer.WriteAsync(ob.FeeAmount, NpgsqlDbType.Numeric, cancellationToken);
+        }
+        await writer.CompleteAsync(cancellationToken);
     }
 
     /// <summary>

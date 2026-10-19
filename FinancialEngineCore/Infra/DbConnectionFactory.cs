@@ -9,6 +9,12 @@ public sealed class DbConnectionFactory(IConfiguration config)
         ?? throw new InvalidOperationException("ConnectionString 'Default' não configurada.");
 
     public async Task<IDbConnection> CreateOpenConnectionAsync(CancellationToken ct)
+        => await CreateOpenNpgsqlConnectionAsync(ct);
+
+    /// <summary>
+    /// Conexão tipada Npgsql — necessária para operações específicas como binary COPY.
+    /// </summary>
+    public async Task<NpgsqlConnection> CreateOpenNpgsqlConnectionAsync(CancellationToken ct)
     {
         var conn = new NpgsqlConnection(_cs);
         await conn.OpenAsync(ct);

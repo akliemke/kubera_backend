@@ -65,6 +65,23 @@ public class FixedMonthlyFeeRepository
         return rows > 0;
     }
 
+    /// <summary>
+    /// Cobranças fixas de todos os brokers com vigência que toca o período [firstDay, lastDay].
+    /// </summary>
+    public async Task<IEnumerable<FixedMonthlyFee>> GetByPeriodAsync(
+        DateOnly firstDay, DateOnly lastDay, CancellationToken cancellationToken)
+    {
+        const string sql = @"
+            SELECT * FROM financial_engine.fixed_monthly_fees
+            WHERE IsActive = TRUE
+              AND ValidFrom <= @LastDay
+              AND ValidTo >= @FirstDay
+            ORDER BY Broker, Description";
+
+        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
+        return await conn.QueryAsync<FixedMonthlyFee>(sql, new { FirstDay = firstDay, LastDay = lastDay });
+    }
+
     public async Task<IEnumerable<FixedMonthlyFee>> GetByBrokerAndMonthAsync(
         int brokerId, int year, int month, CancellationToken cancellationToken)
     {

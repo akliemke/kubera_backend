@@ -200,7 +200,7 @@ public static class EquityFeeBracketController
         if (request.Bps < 0)
             errors.Add("Bps deve ser maior ou igual a zero");
         if (request.Cap < 0)
-            errors.Add("Cap deve ser maior ou igual a zero");
+            errors.Add("Cap deve ser maior ou igual a zero (vazio = sem teto)");
         return errors;
     }
 
@@ -216,7 +216,7 @@ public static class EquityFeeBracketController
         if (request.Bps < 0)
             errors.Add("Bps deve ser maior ou igual a zero");
         if (request.Cap < 0)
-            errors.Add("Cap deve ser maior ou igual a zero");
+            errors.Add("Cap deve ser maior ou igual a zero (vazio = sem teto)");
         return errors;
     }
 }
@@ -229,7 +229,7 @@ public record CreateEquityFeeBracketRequest(
     decimal NotionalFrom,
     decimal? NotionalTo,
     decimal Bps,
-    decimal Cap
+    decimal? Cap // NULL = sem teto
 );
 
 public record UpdateEquityFeeBracketRequest(
@@ -238,7 +238,7 @@ public record UpdateEquityFeeBracketRequest(
     decimal NotionalFrom,
     decimal? NotionalTo,
     decimal Bps,
-    decimal Cap
+    decimal? Cap // NULL = sem teto
 );
 
 public record CopyBracketsToTraderRequest(int BrokerId, string Trader);

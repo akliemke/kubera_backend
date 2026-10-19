@@ -27,7 +27,7 @@ public class BillingKeyResolutionTests
     public void ResolveBillingKey_EntityConfigured_ReturnsEntity()
     {
         var order = CreateOrder("TRADER1", "MESA_A");
-        var entitySet = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "MESA_A" };
+        var entitySet = BillingProcessingService.BuildEntityKeyMap(new[] { "MESA_A" });
 
         var result = BillingProcessingService.ResolveBillingKey(order, entitySet);
 
@@ -38,7 +38,7 @@ public class BillingKeyResolutionTests
     public void ResolveBillingKey_EntityNotConfigured_ReturnsTrader()
     {
         var order = CreateOrder("TRADER1", "MESA_B");
-        var entitySet = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "MESA_A" };
+        var entitySet = BillingProcessingService.BuildEntityKeyMap(new[] { "MESA_A" });
 
         var result = BillingProcessingService.ResolveBillingKey(order, entitySet);
 
@@ -49,7 +49,7 @@ public class BillingKeyResolutionTests
     public void ResolveBillingKey_NoConfigs_ReturnsTrader()
     {
         var order = CreateOrder("TRADER1", "MESA_A");
-        var entitySet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var entitySet = BillingProcessingService.BuildEntityKeyMap([]);
 
         var result = BillingProcessingService.ResolveBillingKey(order, entitySet);
 
@@ -57,20 +57,21 @@ public class BillingKeyResolutionTests
     }
 
     [Fact]
-    public void ResolveBillingKey_CaseInsensitive()
+    public void ResolveBillingKey_CaseInsensitive_ReturnsConfiguredSpelling()
     {
         var order = CreateOrder("TRADER1", "mesa_a");
-        var entitySet = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "MESA_A" };
+        var entitySet = BillingProcessingService.BuildEntityKeyMap(new[] { "MESA_A" });
 
         var result = BillingProcessingService.ResolveBillingKey(order, entitySet);
 
-        Assert.Equal("mesa_a", result);
+        // Canonical key = spelling from the entity config, so all casings group together
+        Assert.Equal("MESA_A", result);
     }
 
     [Fact]
     public void ResolveBillingKey_MixedGrouping_EntityAndTrader()
     {
-        var entitySet = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "MESA_A" };
+        var entitySet = BillingProcessingService.BuildEntityKeyMap(new[] { "MESA_A" });
 
         var order1 = CreateOrder("TRADER1", "MESA_A"); // entity configured
         var order2 = CreateOrder("TRADER2", "MESA_B"); // entity NOT configured
@@ -84,7 +85,7 @@ public class BillingKeyResolutionTests
     [Fact]
     public void ResolveBillingKey_SameEntity_DifferentAssetClasses_GroupedSeparately()
     {
-        var entitySet = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "MESA_A" };
+        var entitySet = BillingProcessingService.BuildEntityKeyMap(new[] { "MESA_A" });
 
         var equityOrder = CreateOrder("TRADER1", "MESA_A", "EQUITY");
         var bmfOrder = CreateOrder("TRADER1", "MESA_A", "BMF");

@@ -318,4 +318,49 @@ public class BmfCalculationStrategyTests
         Assert.Equal(100m, result.TotalQty);
         Assert.Equal(15.00m, result.TotalFee);
     }
+
+    [Fact]
+    public void Calculate_NullCapMensal_ChargesWithoutCeiling()
+    {
+        var config = CreateDefaultConfig();
+        config.CapMensal = null;
+        var orders = new List<Order> { CreateBmfOrder("INDZ24", 1_000_000) }; // 150,000
+
+        var result = BmfCalculationStrategy.Calculate(orders, config, 100_000m, orders[0].TradeDate);
+
+        Assert.Equal(150_000m, result.TotalFee);
+        Assert.Equal(250_000m, result.AccumulatedAfter);
+    }
+
+    [Fact]
+    public void Calculate_UnknownContract_ZeroFeeAndReported()
+    {
+        var orders = new List<Order>
+        {
+            CreateBmfOrder("WINZ24", 100),
+            CreateBmfOrder("BITZ24", 50)
+        };
+
+        var result = BmfCalculationStrategy.Calculate(orders, CreateDefaultConfig(), 0, orders[0].TradeDate);
+
+        Assert.Equal(3.00m, result.TotalFee); // only WIN: 100 * 0.03
+        Assert.Equal(new[] { "BITZ24" }, result.UnknownSymbols);
+    }
+
+    [Fact]
+    public void Calculate_OrderFeesSumToRoundedTotal()
+    {
+        // 0.03 + 0.03 + 0.15 = 0.21 split by qty (1/3 each = 0.07): sum must close at 0.21
+        var orders = new List<Order>
+        {
+            CreateBmfOrder("WDOZ24", 1),
+            CreateBmfOrder("WDOZ24", 1),
+            CreateBmfOrder("INDZ24", 1)
+        };
+
+        var result = BmfCalculationStrategy.Calculate(orders, CreateDefaultConfig(), 0, orders[0].TradeDate);
+
+        Assert.Equal(0.21m, result.TotalFee);
+        Assert.Equal(0.21m, result.OrderFees.Sum(o => o.FeeAmount));
+    }
 }

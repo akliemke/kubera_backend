@@ -28,8 +28,10 @@ public class BmfCalculationStrategy : ICalculationStrategy
         IReadOnlyList<Order> orders,
         BrokerBillingContext context)
     {
+        var feeChargedInMonth = context.GetBmfFeeCharged(trader);
+
         if (orders.Count == 0)
-            return CreateEmptyResult(brokerId, trader, tradeDate, orders);
+            return CreateEmptyResult(brokerId, trader, tradeDate, orders, feeChargedInMonth);
 
         var config = context.GetBmfConfig(trader);
 
@@ -39,12 +41,21 @@ public class BmfCalculationStrategy : ICalculationStrategy
                 "No BMF config found for broker {BrokerId}, trader {Trader}",
                 brokerId, trader);
 
-            return CreateEmptyResult(brokerId, trader, tradeDate, orders);
+            return CreateEmptyResult(brokerId, trader, tradeDate, orders, feeChargedInMonth);
         }
 
-        return Calculate(
-            orders, config, context.GetBmfFeeCharged(trader), tradeDate,
+        var result = Calculate(
+            orders, config, feeChargedInMonth, tradeDate,
             billingKey: trader, brokerId: brokerId);
+
+        if (result.UnknownSymbols.Count > 0)
+        {
+            _logger.LogWarning(
+                "Unclassified BMF contracts charged as zero for broker {BrokerId}, trader {Trader} on {Date}: {Symbols}",
+                brokerId, trader, tradeDate, string.Join(", ", result.UnknownSymbols));
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -68,6 +79,7 @@ public class BmfCalculationStrategy : ICalculationStrategy
         // Calcular quantidade total e fee por tipo de contrato
         decimal totalQty = 0;
         decimal calculatedFee = 0;
+        var unknownSymbols = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var order in orders)
         {
@@ -75,16 +87,20 @@ public class BmfCalculationStrategy : ICalculationStrategy
             totalQty += qty;
 
             var contractType = ClassifyContract(order.ExchangeSymbol);
+            if (contractType == ContractType.Unknown)
+                unknownSymbols.Add(order.ExchangeSymbol ?? order.Symbol);
+
             var feePerContract = GetFeePerContract(contractType, order.ExchangeSymbol, config, tradeDate);
             calculatedFee += qty * feePerContract;
         }
 
-        // Aplicar CAP mensal
-        var capRemaining = Math.Max(0, config.CapMensal - feeChargedInMonth);
-        var totalFee = Math.Min(calculatedFee, capRemaining);
+        // Aplicar CAP mensal (NULL = sem teto)
+        var totalFee = config.CapMensal is { } cap
+            ? Math.Min(calculatedFee, Math.Max(0, cap - feeChargedInMonth))
+            : calculatedFee;
 
         // Distribuir fee proporcionalmente entre as ordens
-        var orderFees = DistributeFeeProportionally(orders, totalQty, totalFee);
+        var orderFees = DistributeFeeProportionally(orders, totalFee);
 
         return new BillingCalculationResult
         {
@@ -98,7 +114,8 @@ public class BmfCalculationStrategy : ICalculationStrategy
             AccumulatedBefore = feeChargedInMonth,
             AccumulatedAfter = feeChargedInMonth + totalFee,
             ConfigId = config.Id,
-            OrderFees = orderFees
+            OrderFees = orderFees,
+            UnknownSymbols = unknownSymbols.ToList()
         };
     }
 
@@ -236,30 +253,20 @@ public class BmfCalculationStrategy : ICalculationStrategy
     }
 
     /// <summary>
-    /// Distribui o fee total proporcionalmente entre as ordens.
+    /// Distribui o fee total proporcionalmente à quantidade das ordens (Σ ordens = fee do dia em centavos).
     /// </summary>
     private static List<OrderFeeResult> DistributeFeeProportionally(
         IReadOnlyList<Order> orders,
-        decimal totalQty,
         decimal totalFee)
     {
-        if (totalQty == 0)
-        {
-            return orders.Select(o => new OrderFeeResult
-            {
-                OrderId = o.Id,
-                Notional = 0,
-                Qty = o.CumQty,
-                FeeAmount = 0
-            }).ToList();
-        }
+        var fees = FeeDistribution.Distribute(orders.Select(o => o.CumQty).ToList(), totalFee);
 
-        return orders.Select(o => new OrderFeeResult
+        return orders.Select((o, i) => new OrderFeeResult
         {
             OrderId = o.Id,
             Notional = 0,
             Qty = o.CumQty,
-            FeeAmount = Math.Round((o.CumQty / totalQty) * totalFee, 2)
+            FeeAmount = fees[i]
         }).ToList();
     }
 
@@ -267,7 +274,8 @@ public class BmfCalculationStrategy : ICalculationStrategy
         int brokerId,
         string trader,
         DateOnly tradeDate,
-        IReadOnlyList<Order> orders)
+        IReadOnlyList<Order> orders,
+        decimal feeChargedInMonth)
     {
         return new BillingCalculationResult
         {
@@ -278,8 +286,8 @@ public class BmfCalculationStrategy : ICalculationStrategy
             TotalNotional = 0,
             TotalQty = orders.Sum(o => o.CumQty),
             TotalFee = 0,
-            AccumulatedBefore = 0,
-            AccumulatedAfter = 0,
+            AccumulatedBefore = feeChargedInMonth,
+            AccumulatedAfter = feeChargedInMonth,
             ConfigId = null,
             OrderFees = orders.Select(o => new OrderFeeResult
             {

@@ -48,7 +48,8 @@ public static class EntityBillingConfigController
                 Entity = request.Entity,
                 ValidFrom = request.ValidFrom,
                 ValidTo = request.ValidTo,
-                IsActive = true
+                IsActive = true,
+                FloorFee = request.FloorFee
             };
 
             var created = await repository.CreateAsync(config, ct);
@@ -75,6 +76,7 @@ public static class EntityBillingConfigController
             existing.Entity = request.Entity;
             existing.ValidFrom = request.ValidFrom;
             existing.ValidTo = request.ValidTo;
+            existing.FloorFee = request.FloorFee;
 
             await repository.UpdateAsync(existing, ct);
             return Results.Ok(existing);
@@ -111,6 +113,8 @@ public static class EntityBillingConfigController
             errors.Add("Entity é obrigatório");
         if (request.ValidFrom >= request.ValidTo)
             errors.Add("ValidFrom deve ser anterior a ValidTo");
+        if (request.FloorFee is < 0)
+            errors.Add("FloorFee deve ser maior ou igual a zero");
         return errors;
     }
 
@@ -123,6 +127,8 @@ public static class EntityBillingConfigController
             errors.Add("Entity é obrigatório");
         if (request.ValidFrom >= request.ValidTo)
             errors.Add("ValidFrom deve ser anterior a ValidTo");
+        if (request.FloorFee is < 0)
+            errors.Add("FloorFee deve ser maior ou igual a zero");
         return errors;
     }
 }
@@ -131,12 +137,14 @@ public record CreateEntityBillingConfigRequest(
     int Broker,
     string Entity,
     DateOnly ValidFrom,
-    DateOnly ValidTo
+    DateOnly ValidTo,
+    decimal? FloorFee = null
 );
 
 public record UpdateEntityBillingConfigRequest(
     int Broker,
     string Entity,
     DateOnly ValidFrom,
-    DateOnly ValidTo
+    DateOnly ValidTo,
+    decimal? FloorFee = null
 );

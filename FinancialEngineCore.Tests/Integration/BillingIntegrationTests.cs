@@ -1,4 +1,5 @@
 using Dapper;
+using FinancialEngineCore.Domain;
 using FinancialEngineCore.Domain.Services;
 using FinancialEngineCore.Domain.Strategies;
 using FinancialEngineCore.Infra;
@@ -327,9 +328,288 @@ public class BillingIntegrationTests : IAsyncLifetime
     }
 
     // ==========================================
+    // Test 9: Reprocessing a past day cascades to later processed days of the month
+    // ==========================================
+    [Fact]
+    public async Task Reprocessamento_DiaAnterior_RecalculaDiasSeguintesEmCascata()
+    {
+        await SeedBroker();
+        await SeedDefaultEquityBrackets();
+
+        var day13 = new DateOnly(2024, 11, 13);
+        var day14 = new DateOnly(2024, 11, 14);
+        var day15 = new DateOnly(2024, 11, 15);
+
+        await SeedOrder(1, 300_000, 100, "JOAO", "PETR4", "EQUITY", tradeDate: day13); // 30M
+        await SeedOrder(2, 300_000, 100, "JOAO", "PETR4", "EQUITY", tradeDate: day14); // 30M
+        await SeedOrder(3, 100_000, 100, "JOAO", "PETR4", "EQUITY", tradeDate: day15); // 10M
+
+        var service = CreateService();
+        foreach (var day in new[] { day13, day14, day15 })
+            await service.ProcessBrokerAsync(BrokerId, day, ProcessBillingId, CancellationToken.None);
+
+        // Before correction: day14 = 20M in b1 (cap remaining 600) + 10M in b2 (450) = 1050
+        Assert.Equal(1050m, (await GetDailyBilling("JOAO", "EQUITY", day14))!.TotalFee);
+
+        // Late correction on day 13: +20M (day 13 becomes 50M)
+        await SeedOrder(4, 200_000, 100, "JOAO", "PETR4", "EQUITY", tradeDate: day13);
+
+        // Act: reprocess ONLY day 13
+        await service.ProcessBrokerAsync(BrokerId, day13, ProcessBillingId, CancellationToken.None);
+
+        // Day 13: 50M in b1 = 2500 -> CAP 2100
+        var b13 = await GetDailyBilling("JOAO", "EQUITY", day13);
+        Assert.Equal(2100m, b13!.TotalFee);
+
+        // Day 14: starts at 50M -> 30M all in b2 = 1350
+        var b14 = await GetDailyBilling("JOAO", "EQUITY", day14);
+        Assert.Equal(50_000_000m, b14!.AccumulatedBefore);
+        Assert.Equal(1350m, b14.TotalFee);
+        Assert.Single(await GetBracketFeeTrackings(b14.Id));
+
+        // Day 15: starts at 80M -> 10M in b2 = 450
+        var b15 = await GetDailyBilling("JOAO", "EQUITY", day15);
+        Assert.Equal(80_000_000m, b15!.AccumulatedBefore);
+        Assert.Equal(450m, b15.TotalFee);
+    }
+
+    // ==========================================
+    // Test 10: Reprocessing a day whose orders were removed clears the stale billing
+    // ==========================================
+    [Fact]
+    public async Task Reprocessamento_DiaSemOrdens_RemoveBillingAntigo()
+    {
+        await SeedBroker();
+        await SeedDefaultEquityBrackets();
+        await SeedOrder(1, 100_000, 100, "TRADER1", "PETR4", "EQUITY");
+
+        var service = CreateService();
+        await service.ProcessBrokerAsync(BrokerId, _tradeDate, ProcessBillingId, CancellationToken.None);
+        Assert.NotNull(await GetDailyBilling("TRADER1", "EQUITY"));
+
+        await using (var conn = new NpgsqlConnection(_db.ConnectionString))
+        {
+            await conn.OpenAsync();
+            await conn.ExecuteAsync("DELETE FROM history.orders");
+        }
+
+        await service.ProcessBrokerAsync(BrokerId, _tradeDate, ProcessBillingId, CancellationToken.None);
+
+        Assert.Null(await GetDailyBilling("TRADER1", "EQUITY"));
+    }
+
+    // ==========================================
+    // Test 11: CAP NULL persists and charges without ceiling
+    // ==========================================
+    [Fact]
+    public async Task CapNulo_SemTeto_PersisteBracketCapNulo()
+    {
+        await SeedBroker();
+        await InsertEquityBracket(BrokerId, null, 0m, null, 0.5m, cap: null);
+        await SeedOrder(1, 1_000_000, 100, "TRADER1", "PETR4", "EQUITY"); // 100M -> 5000, no cap
+
+        await CreateService().ProcessBrokerAsync(BrokerId, _tradeDate, ProcessBillingId, CancellationToken.None);
+
+        var billing = await GetDailyBilling("TRADER1", "EQUITY");
+        Assert.Equal(5000m, billing!.TotalFee);
+        Assert.Null(Assert.Single(await GetBracketFeeTrackings(billing.Id)).BracketCap);
+    }
+
+    // ==========================================
+    // Test 12: Entity casing differences group into one billing key
+    // ==========================================
+    [Fact]
+    public async Task EntityBilling_CasingDiferente_AgrupaNaGrafiaDaConfig()
+    {
+        await SeedBroker();
+        await SeedDefaultEquityBrackets();
+        await SeedEntityBillingConfig("MESA_A");
+        await SeedOrder(1, 100_000, 100, "JOAO", "PETR4", "EQUITY", entity: "mesa_a");
+        await SeedOrder(2, 100_000, 100, "MARIA", "VALE3", "EQUITY", entity: "MESA_A");
+
+        await CreateService().ProcessBrokerAsync(BrokerId, _tradeDate, ProcessBillingId, CancellationToken.None);
+
+        var billing = await GetDailyBilling("MESA_A", "EQUITY");
+        Assert.Equal(20_000_000m, billing!.TotalNotional);
+        Assert.Equal(2, (await GetOrderBillings(billing.Id)).Count);
+    }
+
+    // ==========================================
+    // Test 13: Period queries feed the monthly revenue (variable + fixed + floor)
+    // ==========================================
+    [Fact]
+    public async Task ReceitaMensal_ConsultasPorPeriodo_CompoemVariavelFixaEPiso()
+    {
+        await SeedBroker();
+        await SeedPreviousDailyBilling("MESA_A", "EQUITY", totalNotional: 1_000_000m, totalFee: 300m, tradeDate: new DateOnly(2024, 11, 5));
+        await SeedPreviousDailyBilling("MESA_A", "BMF", totalNotional: 0m, totalFee: 100m, tradeDate: new DateOnly(2024, 11, 6));
+        await SeedPreviousDailyBilling("JOAO", "EQUITY", totalNotional: 1_000_000m, totalFee: 500m, tradeDate: new DateOnly(2024, 10, 7));
+
+        await using (var conn = new NpgsqlConnection(_db.ConnectionString))
+        {
+            await conn.OpenAsync();
+            await conn.ExecuteAsync(@"
+                INSERT INTO financial_engine.entity_billing_configs (Broker, Entity, ValidFrom, ValidTo, IsActive, FloorFee)
+                VALUES (@Broker, 'MESA_A', '2024-11-01', '2099-12-31', TRUE, 1000)", new { Broker = BrokerId });
+            await conn.ExecuteAsync(@"
+                INSERT INTO financial_engine.fixed_monthly_fees (Broker, Description, Amount, ValidFrom, ValidTo, IsActive)
+                VALUES (@Broker, 'Plataforma', 250, '2024-01-01', '2099-12-31', TRUE)", new { Broker = BrokerId });
+        }
+
+        var dbFactory = new DbConnectionFactory(new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:Default"] = _db.ConnectionString })
+            .Build());
+        var from = new DateOnly(2024, 10, 1);
+        var toExclusive = new DateOnly(2024, 12, 1);
+
+        var fees = await new DailyBillingRepository(dbFactory).GetFeeByBillingKeyAndMonthAsync(from, toExclusive, CancellationToken.None);
+        var configs = await new EntityBillingConfigRepository(dbFactory).GetByPeriodAsync(from, toExclusive.AddDays(-1), CancellationToken.None);
+        var fixedFees = await new FixedMonthlyFeeRepository(dbFactory).GetByPeriodAsync(from, toExclusive.AddDays(-1), CancellationToken.None);
+
+        var revenue = MonthlyRevenueCalculator.Calculate(2024, [10, 11], fees, configs, fixedFees, []);
+
+        // October: JOAO 500 variable + 250 fixed; MESA_A floor not yet valid
+        var oct = revenue.Single(r => r.Month == 10);
+        Assert.Equal(500m, oct.VariableFee);
+        Assert.Equal(250m, oct.FixedFee);
+        Assert.Equal(0m, oct.FloorAdjustment);
+
+        // November: MESA_A 400 (EQUITY+BMF) + 250 fixed + floor 600
+        var nov = revenue.Single(r => r.Month == 11);
+        Assert.Equal(400m, nov.VariableFee);
+        Assert.Equal(600m, nov.FloorAdjustment);
+        Assert.Equal(1250m, nov.TotalFee);
+    }
+
+    // ==========================================
+    // Test 14: Market Data is added automatically at the end of the broker's billing
+    // ==========================================
+    [Fact]
+    public async Task MarketData_ProcessamentoDoBroker_ApuraUsuariosVinculadosMenosExcluidos()
+    {
+        await SeedBroker();
+        await SeedDefaultEquityBrackets();
+        await SeedOrder(1, 100_000, 100, "JOAO", "PETR4", "EQUITY");
+
+        // JOAO linked on 2 days (charged once), maria on 1 day, API_BOT globally excluded,
+        // ADMIN1 excluded only for this broker, other broker's user ignored
+        await SeedSnapshot(new DateOnly(2024, 11, 1), (BrokerId, "JOAO"), (BrokerId, "API_BOT"), (BrokerId, "ADMIN1"), (2, "OUTRO"));
+        await SeedSnapshot(new DateOnly(2024, 11, 2), (BrokerId, "JOAO"), (BrokerId, "maria"));
+        await SeedSnapshot(new DateOnly(2024, 10, 31), (BrokerId, "PEDRO")); // other month
+        await SeedMarketDataConfig(BrokerId, 150m);
+        await SeedMarketDataExclusion(null, "api_bot");
+        await SeedMarketDataExclusion(BrokerId, "ADMIN1");
+
+        await CreateService().ProcessBrokerAsync(BrokerId, _tradeDate, ProcessBillingId, CancellationToken.None);
+
+        var billing = await GetMarketDataBilling(2024, 11);
+        Assert.Equal(new[] { "JOAO", "maria" }, billing.Select(b => b.Trader).OrderBy(t => t, StringComparer.OrdinalIgnoreCase));
+        Assert.All(billing, b => Assert.Equal(150m, b.Amount));
+        Assert.All(billing, b => Assert.Equal(BrokerId, b.Broker));
+
+        // Reprocessing is idempotent
+        await CreateService().ProcessBrokerAsync(BrokerId, _tradeDate, ProcessBillingId, CancellationToken.None);
+        Assert.Equal(2, (await GetMarketDataBilling(2024, 11)).Count);
+    }
+
+    // ==========================================
+    // Test 15: New exclusion + recalculation removes the user; revenue includes Market Data
+    // ==========================================
+    [Fact]
+    public async Task MarketData_ExclusaoERecalculo_RemoveUsuario_EReceitaIncluiMarketData()
+    {
+        await SeedBroker();
+        await SeedSnapshot(new DateOnly(2024, 11, 3), (BrokerId, "JOAO"), (BrokerId, "MARIA"));
+        await SeedMarketDataConfig(BrokerId, 100m);
+
+        var service = CreateMarketDataService();
+        await service.RecalculateMonthAsync(2024, 11, null, CancellationToken.None);
+        Assert.Equal(2, (await GetMarketDataBilling(2024, 11)).Count);
+
+        await SeedMarketDataExclusion(BrokerId, "MARIA");
+        var result = await service.RecalculateMonthAsync(2024, 11, null, CancellationToken.None);
+
+        Assert.Single(result.Excluded);
+        var billing = Assert.Single(await GetMarketDataBilling(2024, 11));
+        Assert.Equal("JOAO", billing.Trader);
+
+        // Revenue (reports/dashboard) picks it up for a broker with no variable billing
+        var marketData = await new MarketDataBillingRepository(CreateDbFactory())
+            .GetByPeriodAsync(2024, 11, 11, null, CancellationToken.None);
+        var revenue = Assert.Single(MonthlyRevenueCalculator.Calculate(2024, [11], [], [], [], marketData));
+        Assert.Equal(100m, revenue.MarketDataFee);
+        Assert.Equal(100m, revenue.TotalFee);
+    }
+
+    // ==========================================
+    // Test 16: Sync reads the external API, stores the day's snapshot and recalculates the month
+    // ==========================================
+    [Fact]
+    public async Task MarketData_Sync_GravaSnapshotDoDiaERecalculaMes()
+    {
+        await SeedBroker();
+        await SeedMarketDataConfig(BrokerId, 80m);
+
+        var handler = new StubHttpHandler($$"""[{"broker": {{BrokerId}}, "user": "JOAO"}, {"broker": {{BrokerId}}, "user": "JOAO"}, {"broker": {{BrokerId}}, "user": " ANA "}]""");
+        var http = new HttpClient(handler) { BaseAddress = new Uri("http://accounts.test/") };
+        var service = CreateMarketDataService(http);
+
+        var count = await service.SyncAsync(new DateOnly(2024, 11, 20), CancellationToken.None);
+
+        Assert.Equal(3, count);
+        Assert.Equal("http://accounts.test/accounts", handler.LastRequestUri?.ToString());
+
+        var billing = await GetMarketDataBilling(2024, 11);
+        Assert.Equal(new[] { "ANA", "JOAO" }, billing.Select(b => b.Trader).OrderBy(t => t));
+    }
+
+    private sealed class StubHttpHandler(string json) : HttpMessageHandler
+    {
+        public Uri? LastRequestUri { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            LastRequestUri = request.RequestUri;
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")
+            });
+        }
+    }
+
+    private async Task SeedSnapshot(DateOnly date, params (int Broker, string Trader)[] accounts)
+    {
+        await new UserExchangeAccountSnapshotRepository(CreateDbFactory()).ReplaceSnapshotAsync(
+            date, accounts.Select(a => new UserExchangeAccount(a.Broker, a.Trader)), CancellationToken.None);
+    }
+
+    private async Task SeedMarketDataConfig(int broker, decimal amountPerUser)
+    {
+        await using var conn = new NpgsqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await conn.ExecuteAsync(@"
+            INSERT INTO financial_engine.market_data_fee_configs (Broker, AmountPerUser, ValidFrom, ValidTo, IsActive)
+            VALUES (@Broker, @Amount, '2024-01-01', '2099-12-31', TRUE)",
+            new { Broker = broker, Amount = amountPerUser });
+    }
+
+    private async Task SeedMarketDataExclusion(int? broker, string trader)
+    {
+        await using var conn = new NpgsqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await conn.ExecuteAsync(@"
+            INSERT INTO financial_engine.market_data_exclusions (Broker, Trader, Reason, IsActive)
+            VALUES (@Broker, @Trader, 'teste', TRUE)",
+            new { Broker = broker, Trader = trader });
+    }
+
+    private async Task<List<MarketDataBilling>> GetMarketDataBilling(int year, int month)
+        => await new MarketDataBillingRepository(CreateDbFactory()).GetByPeriodAsync(year, month, month, null, CancellationToken.None);
+
+    // ==========================================
     // Helper: Create service with real repositories
     // ==========================================
-    private BillingProcessingService CreateService()
+    private DbConnectionFactory CreateDbFactory()
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -337,7 +617,26 @@ public class BillingIntegrationTests : IAsyncLifetime
                 ["ConnectionStrings:Default"] = _db.ConnectionString
             }).Build();
 
-        var dbFactory = new DbConnectionFactory(config);
+        return new DbConnectionFactory(config);
+    }
+
+    private MarketDataService CreateMarketDataService(HttpClient? apiHttpClient = null)
+    {
+        var dbFactory = CreateDbFactory();
+        return new MarketDataService(
+            new UserExchangeAccountApiClient(apiHttpClient ?? new HttpClient()),
+            new UserExchangeAccountSnapshotRepository(dbFactory),
+            new MarketDataFeeConfigRepository(dbFactory),
+            new MarketDataExclusionRepository(dbFactory),
+            new MarketDataBillingRepository(dbFactory),
+            new DailyBillingRepository(dbFactory),
+            dbFactory,
+            NullLogger<MarketDataService>.Instance);
+    }
+
+    private BillingProcessingService CreateService()
+    {
+        var dbFactory = CreateDbFactory();
 
         var orderRepo = new OrdersRepository(dbFactory);
         var dailyBillingRepo = new DailyBillingRepository(dbFactory);
@@ -355,7 +654,7 @@ public class BillingIntegrationTests : IAsyncLifetime
         return new BillingProcessingService(
             orderRepo, dailyBillingRepo, orderBillingRepo, bracketFeeTrackingRepo,
             entityBillingConfigRepo, bracketRepo, bmfConfigRepo, priceFactorRepo,
-            dbFactory, registry, NullLogger<BillingProcessingService>.Instance);
+            dbFactory, registry, CreateMarketDataService(), NullLogger<BillingProcessingService>.Instance);
     }
 
     // ==========================================
@@ -366,7 +665,7 @@ public class BillingIntegrationTests : IAsyncLifetime
         await using var conn = new NpgsqlConnection(_db.ConnectionString);
         await conn.OpenAsync();
         await conn.ExecuteAsync(
-            "INSERT INTO management.brokers (Code, Name) VALUES (@Code, @Name) ON CONFLICT DO NOTHING",
+            "INSERT INTO financial_engine.brokers (Code, Name) VALUES (@Code, @Name) ON CONFLICT DO NOTHING",
             new { Code = BrokerId, Name = "BTG Test" });
     }
 
@@ -392,7 +691,7 @@ public class BillingIntegrationTests : IAsyncLifetime
         }
     }
 
-    private async Task InsertEquityBracket(int broker, string? trader, decimal notionalFrom, decimal? notionalTo, decimal bps, decimal cap)
+    private async Task InsertEquityBracket(int broker, string? trader, decimal notionalFrom, decimal? notionalTo, decimal bps, decimal? cap)
     {
         await using var conn = new NpgsqlConnection(_db.ConnectionString);
         await conn.OpenAsync();
@@ -417,8 +716,10 @@ public class BillingIntegrationTests : IAsyncLifetime
     }
 
     private async Task SeedOrder(long id, decimal qty, decimal price, string trader, string symbol,
-        string assetClass, string? exchangeSymbol = null, string entity = "MESA1", string? timeInForce = null)
+        string assetClass, string? exchangeSymbol = null, string entity = "MESA1", string? timeInForce = null,
+        DateOnly? tradeDate = null)
     {
+        var date = tradeDate ?? _tradeDate;
         await using var conn = new NpgsqlConnection(_db.ConnectionString);
         await conn.OpenAsync();
         await conn.ExecuteAsync(@"
@@ -437,9 +738,9 @@ public class BillingIntegrationTests : IAsyncLifetime
                 AssetClass = assetClass,
                 EnteringTrader = trader,
                 Entity = entity,
-                TradeDate = _tradeDate,
+                TradeDate = date,
                 EnteringFirm = BrokerId.ToString(),
-                BusinessDate = _tradeDate.ToString("yyyy-MM-dd"),
+                BusinessDate = date.ToString("yyyy-MM-dd"),
                 TimeInForce = timeInForce
             });
     }
@@ -537,14 +838,14 @@ public class BillingIntegrationTests : IAsyncLifetime
     // ==========================================
     // Assert helpers
     // ==========================================
-    private async Task<DailyBilling?> GetDailyBilling(string trader, string assetClass)
+    private async Task<DailyBilling?> GetDailyBilling(string trader, string assetClass, DateOnly? tradeDate = null)
     {
         await using var conn = new NpgsqlConnection(_db.ConnectionString);
         await conn.OpenAsync();
         return await conn.QueryFirstOrDefaultAsync<DailyBilling>(
             @"SELECT * FROM financial_engine.daily_billing
               WHERE Broker = @Broker AND Trader = @Trader AND AssetClass = @AssetClass AND TradeDate = @TradeDate",
-            new { Broker = BrokerId, Trader = trader, AssetClass = assetClass, TradeDate = _tradeDate });
+            new { Broker = BrokerId, Trader = trader, AssetClass = assetClass, TradeDate = tradeDate ?? _tradeDate });
     }
 
     private async Task<List<OrderBilling>> GetOrderBillings(long dailyBillingId)

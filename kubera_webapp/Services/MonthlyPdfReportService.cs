@@ -1,3 +1,4 @@
+using FinancialEngineCore.Domain;
 using FinancialEngineCore.Infra;
 using FinancialEngineCore.Model;
 using QuestPDF.Fluent;
@@ -18,13 +19,24 @@ public class MonthlyPdfReportService
         int month,
         IReadOnlyList<TraderMonthSummary> traderSummaries,
         List<OrderBillingDetail> orderDetails,
-        IEnumerable<FixedMonthlyFee>? fixedFees = null)
+        IEnumerable<FixedMonthlyFee>? fixedFees = null,
+        IEnumerable<EntityBillingConfig>? entityConfigs = null,
+        IEnumerable<MarketDataBilling>? marketDataBilling = null)
     {
         var monthName = MonthNames[month - 1];
         var totalFeeVariavel = traderSummaries.Sum(s => s.TotalFee);
         var fixedFeeList = fixedFees?.ToList() ?? [];
         var totalFeeFixo = fixedFeeList.Sum(f => f.Amount);
-        var totalFee = totalFeeVariavel + totalFeeFixo;
+
+        // Floor fee adjustments per entity
+        var floorAdjustments = FloorFeeCalculator.Calculate(traderSummaries, entityConfigs ?? []);
+        var totalFloorAdjustment = floorAdjustments.Sum(a => a.Adjustment);
+
+        // Market Data: one charge per linked user, added at the end of the broker's billing
+        var marketDataList = marketDataBilling?.OrderBy(m => m.Trader).ToList() ?? [];
+        var totalMarketData = marketDataList.Sum(m => m.Amount);
+
+        var totalFee = totalFeeVariavel + totalFeeFixo + totalFloorAdjustment + totalMarketData;
 
         var document = Document.Create(container =>
         {
@@ -143,6 +155,96 @@ public class MonthlyPdfReportService
                                 .AlignRight().Text("SUBTOTAL").Bold();
                             table.Cell().Background(Colors.Grey.Lighten4).Padding(4)
                                 .AlignRight().Text(totalFeeFixo.ToString("N2")).Bold();
+                        });
+
+                        col.Item().PaddingVertical(10);
+                    }
+
+                    // Section: Floor fee adjustments per entity
+                    if (floorAdjustments.Count > 0)
+                    {
+                        col.Item().Text("AJUSTES FLOOR POR ENTIDADE").Bold().FontSize(11);
+                        col.Item().PaddingTop(5);
+
+                        col.Item().Table(table =>
+                        {
+                            table.ColumnsDefinition(columns =>
+                            {
+                                columns.RelativeColumn(3); // Entity
+                                columns.RelativeColumn(2); // Floor Fee
+                                columns.RelativeColumn(2); // Calculated Fee
+                                columns.RelativeColumn(2); // Adjustment
+                            });
+
+                            table.Header(header =>
+                            {
+                                header.Cell().Background(Colors.Grey.Lighten3).Padding(4)
+                                    .Text("Entidade").Bold();
+                                header.Cell().Background(Colors.Grey.Lighten3).Padding(4)
+                                    .AlignRight().Text("Floor (R$)").Bold();
+                                header.Cell().Background(Colors.Grey.Lighten3).Padding(4)
+                                    .AlignRight().Text("Calculado (R$)").Bold();
+                                header.Cell().Background(Colors.Grey.Lighten3).Padding(4)
+                                    .AlignRight().Text("Ajuste (R$)").Bold();
+                            });
+
+                            foreach (var adj in floorAdjustments.OrderBy(a => a.Entity))
+                            {
+                                table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(3)
+                                    .Text(adj.Entity);
+                                table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(3)
+                                    .AlignRight().Text(adj.FloorFee.ToString("N2"));
+                                table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(3)
+                                    .AlignRight().Text(adj.CalculatedFee.ToString("N2"));
+                                table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(3)
+                                    .AlignRight().Text(adj.Adjustment.ToString("N2"));
+                            }
+
+                            // Subtotal row
+                            table.Cell().ColumnSpan(3).Background(Colors.Grey.Lighten4).Padding(4)
+                                .AlignRight().Text("SUBTOTAL").Bold();
+                            table.Cell().Background(Colors.Grey.Lighten4).Padding(4)
+                                .AlignRight().Text(totalFloorAdjustment.ToString("N2")).Bold();
+                        });
+
+                        col.Item().PaddingVertical(10);
+                    }
+
+                    // Section: Market Data (last charge of the broker's billing)
+                    if (marketDataList.Count > 0)
+                    {
+                        col.Item().Text($"MARKET DATA ({marketDataList.Count} usuarios)").Bold().FontSize(11);
+                        col.Item().PaddingTop(5);
+
+                        col.Item().Table(table =>
+                        {
+                            table.ColumnsDefinition(columns =>
+                            {
+                                columns.RelativeColumn(5); // Usuario
+                                columns.RelativeColumn(3); // Valor
+                            });
+
+                            table.Header(header =>
+                            {
+                                header.Cell().Background(Colors.Grey.Lighten3).Padding(4)
+                                    .Text("Usuario").Bold();
+                                header.Cell().Background(Colors.Grey.Lighten3).Padding(4)
+                                    .AlignRight().Text("Valor (R$)").Bold();
+                            });
+
+                            foreach (var charge in marketDataList)
+                            {
+                                table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(3)
+                                    .Text(charge.Trader);
+                                table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(3)
+                                    .AlignRight().Text(charge.Amount.ToString("N2"));
+                            }
+
+                            // Subtotal row
+                            table.Cell().Background(Colors.Grey.Lighten4).Padding(4)
+                                .AlignRight().Text("SUBTOTAL").Bold();
+                            table.Cell().Background(Colors.Grey.Lighten4).Padding(4)
+                                .AlignRight().Text(totalMarketData.ToString("N2")).Bold();
                         });
 
                         col.Item().PaddingVertical(10);

@@ -7,6 +7,7 @@ namespace FinancialEngineCore.Domain;
 /// Pre-loaded context with all data needed to calculate billing for a broker on a given date.
 /// Encapsulates lookup logic (special vs default, accumulated values) so consumers
 /// don't need to manipulate raw dictionaries.
+/// Billing keys are matched case-insensitively everywhere.
 /// </summary>
 public class BrokerBillingContext
 {
@@ -14,7 +15,7 @@ public class BrokerBillingContext
     private readonly IReadOnlyList<BmfFeeConfig> _allBmfConfigs;
     private readonly Dictionary<string, decimal> _equityAccumulated;
     private readonly Dictionary<string, decimal> _bmfFeeCharged;
-    private readonly Dictionary<string, Dictionary<long, decimal>> _feePerBracket;
+    private readonly Dictionary<string, Dictionary<decimal, decimal>> _feePerBracket;
 
     public IReadOnlyDictionary<string, decimal> PriceFactors { get; }
 
@@ -29,19 +30,23 @@ public class BrokerBillingContext
         _allBmfConfigs = allBmfConfigs;
         PriceFactors = priceFactors;
 
+        // GroupBy + Sum: rows that differ only by casing collapse into the same key
         _equityAccumulated = monthSummaries
             .Where(s => s.AssetClass.Equals("EQUITY", StringComparison.OrdinalIgnoreCase))
-            .ToDictionary(s => s.Trader, s => s.TotalNotional);
+            .GroupBy(s => s.Trader, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Sum(s => s.TotalNotional), StringComparer.OrdinalIgnoreCase);
 
         _bmfFeeCharged = monthSummaries
             .Where(s => s.AssetClass.Equals("BMF", StringComparison.OrdinalIgnoreCase))
-            .ToDictionary(s => s.Trader, s => s.TotalFee);
+            .GroupBy(s => s.Trader, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Sum(s => s.TotalFee), StringComparer.OrdinalIgnoreCase);
 
         _feePerBracket = bracketFees
-            .GroupBy(f => f.Trader)
+            .GroupBy(f => f.Trader, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(
                 g => g.Key,
-                g => g.ToDictionary(f => f.BracketId, f => f.TotalFee));
+                g => g.GroupBy(f => f.NotionalFrom).ToDictionary(b => b.Key, b => b.Sum(f => f.TotalFee)),
+                StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -74,6 +79,10 @@ public class BrokerBillingContext
     public decimal GetBmfFeeCharged(string trader)
         => _bmfFeeCharged.GetValueOrDefault(trader, 0m);
 
-    public Dictionary<long, decimal> GetFeePerBracket(string trader)
-        => _feePerBracket.GetValueOrDefault(trader, new Dictionary<long, decimal>());
+    /// <summary>
+    /// Fee already charged this month per bracket, keyed by bracket NotionalFrom
+    /// (stable across bracket versions / default→special switches within the month).
+    /// </summary>
+    public Dictionary<decimal, decimal> GetFeePerBracket(string trader)
+        => _feePerBracket.GetValueOrDefault(trader, new Dictionary<decimal, decimal>());
 }
