@@ -6,8 +6,8 @@ namespace FinancialEngineCore.Tests;
 
 public class FloorFeeCalculatorTests
 {
-    private static TraderMonthSummary Summary(string key, decimal fee, string assetClass = "EQUITY")
-        => new() { Trader = key, AssetClass = assetClass, TotalFee = fee };
+    private static TraderMonthSummary Summary(string key, decimal fee, string assetClass = "EQUITY", string keyType = BillingKeyTypes.Entity)
+        => new() { Trader = key, KeyType = keyType, AssetClass = assetClass, TotalFee = fee };
 
     private static EntityBillingConfig Config(string entity, decimal? floor, DateOnly? validFrom = null)
         => new() { Entity = entity, FloorFee = floor, ValidFrom = validFrom ?? new DateOnly(2024, 1, 1), ValidTo = new DateOnly(2099, 1, 1) };
@@ -50,5 +50,17 @@ public class FloorFeeCalculatorTests
             [Config("MESA_A", 1000m, new DateOnly(2024, 1, 1)), Config("MESA_A", 1500m, new DateOnly(2024, 6, 15))]);
 
         Assert.Equal(1500m, Assert.Single(result).Adjustment);
+    }
+
+    [Fact]
+    public void Calculate_TraderWithSameNameAsEntity_DoesNotCountTowardFloor()
+    {
+        var result = FloorFeeCalculator.Calculate(
+            [Summary("JOAO", 300m), Summary("JOAO", 5000m, keyType: BillingKeyTypes.Trader)],
+            [Config("JOAO", 1000m)]);
+
+        var adj = Assert.Single(result);
+        Assert.Equal(300m, adj.CalculatedFee);
+        Assert.Equal(700m, adj.Adjustment);
     }
 }

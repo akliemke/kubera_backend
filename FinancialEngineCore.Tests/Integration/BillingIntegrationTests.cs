@@ -199,7 +199,7 @@ public class BillingIntegrationTests : IAsyncLifetime
         await service.ProcessBrokerAsync(BrokerId, _tradeDate, ProcessBillingId, CancellationToken.None);
 
         // Assert: MESA_A consolidated (15M), PEDRO separate (2M)
-        var mesaBilling = await GetDailyBilling("MESA_A", "EQUITY");
+        var mesaBilling = await GetDailyBilling("MESA_A", "EQUITY", keyType: BillingKeyTypes.Entity);
         var pedroBilling = await GetDailyBilling("PEDRO", "EQUITY");
 
         Assert.NotNull(mesaBilling);
@@ -429,9 +429,71 @@ public class BillingIntegrationTests : IAsyncLifetime
 
         await CreateService().ProcessBrokerAsync(BrokerId, _tradeDate, ProcessBillingId, CancellationToken.None);
 
-        var billing = await GetDailyBilling("MESA_A", "EQUITY");
+        var billing = await GetDailyBilling("MESA_A", "EQUITY", keyType: BillingKeyTypes.Entity);
         Assert.Equal(20_000_000m, billing!.TotalNotional);
         Assert.Equal(2, (await GetOrderBillings(billing.Id)).Count);
+    }
+
+    // ==========================================
+    // Entity and trader with the same name are different billing keys
+    // ==========================================
+    [Fact]
+    public async Task EntityETraderComMesmoNome_ChavesSeparadas_AcumuladosIndependentes()
+    {
+        await SeedBroker();
+        await SeedDefaultEquityBrackets();
+        await SeedEntityBillingConfig("JOAO");
+
+        // Entity JOAO already accumulated 45M in the month; trader JOAO accumulated nothing
+        await SeedPreviousDailyBilling("JOAO", "EQUITY", totalNotional: 45_000_000m, totalFee: 2100m,
+            tradeDate: _tradeDate.AddDays(-1), keyType: BillingKeyTypes.Entity);
+        await SeedPreviousBracketFeeTracking(bracketId: 1, chargedFee: 2100m, tradeDate: _tradeDate.AddDays(-1));
+
+        await SeedOrder(1, 100_000, 100, "MARIA", "PETR4", "EQUITY", entity: "JOAO"); // 10M -> entity JOAO
+        await SeedOrder(2, 100_000, 100, "JOAO", "VALE3", "EQUITY", entity: "MESA_B"); // 10M -> trader JOAO
+
+        await CreateService().ProcessBrokerAsync(BrokerId, _tradeDate, ProcessBillingId, CancellationToken.None);
+
+        var entityBilling = await GetDailyBilling("JOAO", "EQUITY", keyType: BillingKeyTypes.Entity);
+        var traderBilling = await GetDailyBilling("JOAO", "EQUITY", keyType: BillingKeyTypes.Trader);
+
+        // Entity: 45M -> 55M. Bracket 1 CAP (2100) already reached; 5M in bracket 2 * 0.45 bps = 225
+        Assert.Equal(45_000_000m, entityBilling!.AccumulatedBefore);
+        Assert.Equal(225m, entityBilling.TotalFee);
+
+        // Trader: starts from zero, 10M * 0.5 bps = 500
+        Assert.Equal(0m, traderBilling!.AccumulatedBefore);
+        Assert.Equal(500m, traderBilling.TotalFee);
+
+        var orderBilling = Assert.Single(await GetOrderBillings(traderBilling.Id));
+        Assert.Equal(BillingKeyTypes.Trader, orderBilling.KeyType);
+    }
+
+    // ==========================================
+    // Trader's own special rule prevails over the entity grouping
+    // ==========================================
+    [Fact]
+    public async Task TraderComRegraEspecial_DentroDeEntity_CobradoNaPropriaRegra()
+    {
+        await SeedBroker();
+        await SeedDefaultEquityBrackets();
+        await SeedEntityBillingConfig("MESA_A");
+        await InsertEquityBracket(BrokerId, "JOAO", 0, null, 0.20m, null);
+
+        await SeedOrder(1, 100_000, 100, "JOAO", "PETR4", "EQUITY", entity: "MESA_A");  // 10M
+        await SeedOrder(2, 100_000, 100, "MARIA", "VALE3", "EQUITY", entity: "MESA_A"); // 10M
+
+        await CreateService().ProcessBrokerAsync(BrokerId, _tradeDate, ProcessBillingId, CancellationToken.None);
+
+        // JOAO leaves the entity: 10M * 0.20 bps = 200
+        var joao = await GetDailyBilling("JOAO", "EQUITY", keyType: BillingKeyTypes.Trader);
+        Assert.Equal(10_000_000m, joao!.TotalNotional);
+        Assert.Equal(200m, joao.TotalFee);
+
+        // MESA_A only has MARIA: 10M * 0.5 bps = 500
+        var mesa = await GetDailyBilling("MESA_A", "EQUITY", keyType: BillingKeyTypes.Entity);
+        Assert.Equal(10_000_000m, mesa!.TotalNotional);
+        Assert.Equal(500m, mesa.TotalFee);
     }
 
     // ==========================================
@@ -441,8 +503,8 @@ public class BillingIntegrationTests : IAsyncLifetime
     public async Task ReceitaMensal_ConsultasPorPeriodo_CompoemVariavelFixaEPiso()
     {
         await SeedBroker();
-        await SeedPreviousDailyBilling("MESA_A", "EQUITY", totalNotional: 1_000_000m, totalFee: 300m, tradeDate: new DateOnly(2024, 11, 5));
-        await SeedPreviousDailyBilling("MESA_A", "BMF", totalNotional: 0m, totalFee: 100m, tradeDate: new DateOnly(2024, 11, 6));
+        await SeedPreviousDailyBilling("MESA_A", "EQUITY", totalNotional: 1_000_000m, totalFee: 300m, tradeDate: new DateOnly(2024, 11, 5), keyType: BillingKeyTypes.Entity);
+        await SeedPreviousDailyBilling("MESA_A", "BMF", totalNotional: 0m, totalFee: 100m, tradeDate: new DateOnly(2024, 11, 6), keyType: BillingKeyTypes.Entity);
         await SeedPreviousDailyBilling("JOAO", "EQUITY", totalNotional: 1_000_000m, totalFee: 500m, tradeDate: new DateOnly(2024, 10, 7));
 
         await using (var conn = new NpgsqlConnection(_db.ConnectionString))
@@ -691,15 +753,25 @@ public class BillingIntegrationTests : IAsyncLifetime
         }
     }
 
-    private async Task InsertEquityBracket(int broker, string? trader, decimal notionalFrom, decimal? notionalTo, decimal bps, decimal? cap)
+    private async Task InsertEquityBracket(int broker, string? trader, decimal notionalFrom, decimal? notionalTo, decimal bps, decimal? cap,
+        string keyType = BillingKeyTypes.Trader)
     {
         await using var conn = new NpgsqlConnection(_db.ConnectionString);
         await conn.OpenAsync();
         await conn.ExecuteAsync(@"
             INSERT INTO financial_engine.equity_fee_brackets
-                (Broker, Trader, ValidFrom, ValidTo, NotionalFrom, NotionalTo, Bps, Cap, IsActive)
-            VALUES (@Broker, @Trader, '2024-01-01', '2099-12-31', @NotionalFrom, @NotionalTo, @Bps, @Cap, TRUE)",
-            new { Broker = broker, Trader = trader, NotionalFrom = notionalFrom, NotionalTo = notionalTo, Bps = bps, Cap = cap });
+                (Broker, Trader, KeyType, ValidFrom, ValidTo, NotionalFrom, NotionalTo, Bps, Cap, IsActive)
+            VALUES (@Broker, @Trader, @KeyType, '2024-01-01', '2099-12-31', @NotionalFrom, @NotionalTo, @Bps, @Cap, TRUE)",
+            new
+            {
+                Broker = broker,
+                Trader = trader,
+                KeyType = trader is null ? null : keyType,
+                NotionalFrom = notionalFrom,
+                NotionalTo = notionalTo,
+                Bps = bps,
+                Cap = cap
+            });
     }
 
     private async Task SeedDefaultBmfConfig()
@@ -746,20 +818,22 @@ public class BillingIntegrationTests : IAsyncLifetime
     }
 
     private async Task SeedPreviousDailyBilling(string trader, string assetClass,
-        decimal totalNotional, decimal totalFee, DateOnly tradeDate, decimal totalQty = 0)
+        decimal totalNotional, decimal totalFee, DateOnly tradeDate, decimal totalQty = 0,
+        string keyType = BillingKeyTypes.Trader)
     {
         await using var conn = new NpgsqlConnection(_db.ConnectionString);
         await conn.OpenAsync();
         await conn.ExecuteAsync(@"
             INSERT INTO financial_engine.daily_billing
-                (Broker, Trader, TradeDate, AssetClass, TotalNotional, TotalQty, TotalFee,
+                (Broker, Trader, KeyType, TradeDate, AssetClass, TotalNotional, TotalQty, TotalFee,
                  AccumulatedBefore, AccumulatedAfter, ProcessBillingId)
-            VALUES (@Broker, @Trader, @TradeDate, @AssetClass, @TotalNotional, @TotalQty, @TotalFee,
+            VALUES (@Broker, @Trader, @KeyType, @TradeDate, @AssetClass, @TotalNotional, @TotalQty, @TotalFee,
                     0, @TotalNotional, @ProcessBillingId)",
             new
             {
                 Broker = BrokerId,
                 Trader = trader,
+                KeyType = keyType,
                 TradeDate = tradeDate,
                 AssetClass = assetClass,
                 TotalNotional = totalNotional,
@@ -838,14 +912,16 @@ public class BillingIntegrationTests : IAsyncLifetime
     // ==========================================
     // Assert helpers
     // ==========================================
-    private async Task<DailyBilling?> GetDailyBilling(string trader, string assetClass, DateOnly? tradeDate = null)
+    private async Task<DailyBilling?> GetDailyBilling(string trader, string assetClass, DateOnly? tradeDate = null,
+        string keyType = BillingKeyTypes.Trader)
     {
         await using var conn = new NpgsqlConnection(_db.ConnectionString);
         await conn.OpenAsync();
-        return await conn.QueryFirstOrDefaultAsync<DailyBilling>(
+        return await conn.QuerySingleOrDefaultAsync<DailyBilling>(
             @"SELECT * FROM financial_engine.daily_billing
-              WHERE Broker = @Broker AND Trader = @Trader AND AssetClass = @AssetClass AND TradeDate = @TradeDate",
-            new { Broker = BrokerId, Trader = trader, AssetClass = assetClass, TradeDate = tradeDate ?? _tradeDate });
+              WHERE Broker = @Broker AND Trader = @Trader AND KeyType = @KeyType
+                AND AssetClass = @AssetClass AND TradeDate = @TradeDate",
+            new { Broker = BrokerId, Trader = trader, KeyType = keyType, AssetClass = assetClass, TradeDate = tradeDate ?? _tradeDate });
     }
 
     private async Task<List<OrderBilling>> GetOrderBillings(long dailyBillingId)

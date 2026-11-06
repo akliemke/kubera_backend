@@ -97,10 +97,10 @@ public class MonthlyPdfReportService
                                 .AlignRight().Text("Fee (R$)").Bold();
                         });
 
-                        foreach (var summary in traderSummaries.OrderBy(s => s.Trader).ThenBy(s => s.AssetClass))
+                        foreach (var summary in traderSummaries.OrderBy(s => s.Trader).ThenBy(s => s.KeyType).ThenBy(s => s.AssetClass))
                         {
                             table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(3)
-                                .Text(summary.Trader);
+                                .Text(BillingKeyLabel(summary.Trader, summary.KeyType));
                             table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(3)
                                 .Text(summary.AssetClass);
                             table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(3)
@@ -250,20 +250,21 @@ public class MonthlyPdfReportService
                         col.Item().PaddingVertical(10);
                     }
 
-                    // Section 3: Order details grouped by (Trader, AssetClass)
+                    // Section 3: Order details grouped by (Trader, KeyType, AssetClass)
                     col.Item().Text("DETALHAMENTO POR ORDEM").Bold().FontSize(11);
                     col.Item().PaddingTop(5);
 
                     var groups = orderDetails
-                        .GroupBy(o => new { o.Trader, o.AssetClass })
+                        .GroupBy(o => new { o.Trader, o.KeyType, o.AssetClass })
                         .OrderBy(g => g.Key.Trader)
+                        .ThenBy(g => g.Key.KeyType)
                         .ThenBy(g => g.Key.AssetClass);
 
                     foreach (var group in groups)
                     {
                         var groupFee = group.Sum(o => o.FeeAmount);
 
-                        col.Item().PaddingTop(5).Text($"Trader: {group.Key.Trader} | {group.Key.AssetClass}")
+                        col.Item().PaddingTop(5).Text($"Trader: {BillingKeyLabel(group.Key.Trader, group.Key.KeyType)} | {group.Key.AssetClass}")
                             .SemiBold().FontSize(10);
 
                         col.Item().PaddingTop(3).Table(table =>
@@ -337,4 +338,8 @@ public class MonthlyPdfReportService
 
         return document.GeneratePdf();
     }
+
+    /// <summary>Entity e trader podem ter o mesmo nome: marca as chaves de entity.</summary>
+    private static string BillingKeyLabel(string key, string keyType)
+        => keyType == BillingKeyTypes.Entity ? $"{key} (Entidade)" : key;
 }

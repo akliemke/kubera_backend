@@ -13,55 +13,6 @@ public class EquityFeeBracketRepository
     }
 
     /// <summary>
-    /// Busca faixas aplicáveis para um (Trader, Broker) em uma data específica.
-    /// Prioridade: regra especial (Trader preenchido) > regra padrão (Trader NULL).
-    /// Se existe regra especial, usa 100% ela (sem fallback).
-    /// </summary>
-    public async Task<IEnumerable<EquityFeeBracket>> GetApplicableBracketsAsync(
-        int brokerId,
-        string trader,
-        DateOnly tradeDate,
-        CancellationToken cancellationToken)
-    {
-        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
-
-        // Primeiro tenta buscar regra especial para o trader
-        const string sqlSpecial = @"
-            SELECT * FROM financial_engine.equity_fee_brackets
-            WHERE Broker = @BrokerId
-              AND Trader = @Trader
-              AND IsActive = TRUE
-              AND @TradeDate >= ValidFrom
-              AND @TradeDate < ValidTo
-            ORDER BY NotionalFrom ASC";
-
-        var specialBrackets = await conn.QueryAsync<EquityFeeBracket>(
-            sqlSpecial,
-            new { BrokerId = brokerId, Trader = trader, TradeDate = tradeDate });
-
-        if (specialBrackets.Any())
-        {
-            return specialBrackets;
-        }
-
-        // Se não existe regra especial, busca regra padrão do broker
-        const string sqlDefault = @"
-            SELECT * FROM financial_engine.equity_fee_brackets
-            WHERE Broker = @BrokerId
-              AND Trader IS NULL
-              AND IsActive = TRUE
-              AND @TradeDate >= ValidFrom
-              AND @TradeDate < ValidTo
-            ORDER BY NotionalFrom ASC";
-
-        var defaultBrackets = await conn.QueryAsync<EquityFeeBracket>(
-            sqlDefault,
-            new { BrokerId = brokerId, TradeDate = tradeDate });
-
-        return defaultBrackets;
-    }
-
-    /// <summary>
     /// Busca todas as faixas ativas (para administração/listagem).
     /// </summary>
     public async Task<IEnumerable<EquityFeeBracket>> GetAllActiveAsync(CancellationToken cancellationToken)
@@ -96,9 +47,9 @@ public class EquityFeeBracketRepository
     {
         const string sql = @"
             INSERT INTO financial_engine.equity_fee_brackets
-                (Broker, Trader, ValidFrom, ValidTo, NotionalFrom, NotionalTo, Bps, Cap, IsActive)
+                (Broker, Trader, KeyType, ValidFrom, ValidTo, NotionalFrom, NotionalTo, Bps, Cap, IsActive)
             VALUES
-                (@Broker, @Trader, @ValidFrom, @ValidTo, @NotionalFrom, @NotionalTo, @Bps, @Cap, @IsActive)
+                (@Broker, @Trader, @KeyType, @ValidFrom, @ValidTo, @NotionalFrom, @NotionalTo, @Bps, @Cap, @IsActive)
             RETURNING *";
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
         return await conn.QuerySingleAsync<EquityFeeBracket>(sql, bracket);
@@ -108,7 +59,7 @@ public class EquityFeeBracketRepository
     {
         const string sql = @"
             UPDATE financial_engine.equity_fee_brackets
-            SET Broker = @Broker, Trader = @Trader, ValidFrom = @ValidFrom, ValidTo = @ValidTo,
+            SET Broker = @Broker, Trader = @Trader, KeyType = @KeyType, ValidFrom = @ValidFrom, ValidTo = @ValidTo,
                 NotionalFrom = @NotionalFrom, NotionalTo = @NotionalTo, Bps = @Bps, Cap = @Cap, IsActive = @IsActive
             WHERE Id = @Id";
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);

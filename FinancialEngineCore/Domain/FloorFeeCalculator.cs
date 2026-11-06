@@ -14,13 +14,15 @@ public record FloorFeeAdjustment(string Entity, decimal FloorFee, decimal Calcul
 /// </summary>
 public static class FloorFeeCalculator
 {
-    /// <param name="monthSummaries">Fee do mês por BillingKey (Trader) de um broker</param>
+    /// <param name="monthSummaries">Fee do mês por BillingKey (Trader + KeyType) de um broker</param>
     /// <param name="entityConfigs">Configs de entity do broker válidas no mês</param>
     public static List<FloorFeeAdjustment> Calculate(
         IEnumerable<TraderMonthSummary> monthSummaries,
         IEnumerable<EntityBillingConfig> entityConfigs)
     {
+        // Só chaves ENTITY: um trader com o mesmo nome da entity não conta no piso dela
         var feeByKey = monthSummaries
+            .Where(s => s.KeyType == BillingKeyTypes.Entity)
             .GroupBy(s => s.Trader, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.Sum(s => s.TotalFee), StringComparer.OrdinalIgnoreCase);
 

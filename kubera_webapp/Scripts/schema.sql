@@ -1,13 +1,21 @@
 -- ============================================
--- Kubera - Schema Completo
--- Substitui: billing_tables.sql, scripts.sql, create_history_schema.sql
+-- Kubera - Script de criacao do banco (do zero)
+-- Executar em um banco vazio. Falha se os objetos ja existirem
+-- (a transacao garante que nada fica pela metade).
+-- Ordem: schemas -> tabelas financial_engine (ordem de FK) -> tabelas history -> views
 -- ============================================
 
--- ============================================
--- Schema financial_engine
--- ============================================
-CREATE SCHEMA IF NOT EXISTS financial_engine AUTHORIZATION "admin";
+BEGIN;
 
+-- ============================================
+-- 1. Schemas
+-- ============================================
+CREATE SCHEMA financial_engine AUTHORIZATION "admin";
+CREATE SCHEMA history AUTHORIZATION "admin";
+
+-- ============================================
+-- 2. Tabelas financial_engine (ordem de dependencia de FK)
+-- ============================================
 CREATE TABLE financial_engine.brokers (
     Id serial NOT NULL,
     Code int NOT NULL,
@@ -34,7 +42,8 @@ CREATE INDEX idx_process_billing_status ON financial_engine.process_billing(Stat
 CREATE TABLE financial_engine.equity_fee_brackets (
     Id BIGSERIAL PRIMARY KEY,
     Broker INT NOT NULL,
-    Trader VARCHAR(100) NULL,
+    Trader VARCHAR(100) NULL,           -- NULL = regra padrao; preenchido = regra especial da chave
+    KeyType VARCHAR(10) NULL,           -- TRADER | ENTITY (NULL sse Trader NULL)
     ValidFrom DATE NOT NULL,
     ValidTo DATE NOT NULL,
     NotionalFrom DECIMAL(18,2) NOT NULL,
@@ -43,17 +52,20 @@ CREATE TABLE financial_engine.equity_fee_brackets (
     Cap DECIMAL(18,2) NULL,             -- NULL = sem teto
     IsActive BOOLEAN NOT NULL DEFAULT TRUE,
     CreatedAt TIMESTAMP NOT NULL DEFAULT NOW(),
-    UpdatedAt TIMESTAMP NOT NULL DEFAULT NOW()
+    UpdatedAt TIMESTAMP NOT NULL DEFAULT NOW(),
+    CONSTRAINT equity_fee_brackets_keytype_ck CHECK (
+        (Trader IS NULL AND KeyType IS NULL) OR (Trader IS NOT NULL AND KeyType IN ('TRADER', 'ENTITY')))
 );
 
 CREATE INDEX idx_equity_fee_brackets_broker ON financial_engine.equity_fee_brackets(Broker);
-CREATE INDEX idx_equity_fee_brackets_trader ON financial_engine.equity_fee_brackets(Broker, Trader);
+CREATE INDEX idx_equity_fee_brackets_trader ON financial_engine.equity_fee_brackets(Broker, KeyType, Trader);
 CREATE INDEX idx_equity_fee_brackets_validity ON financial_engine.equity_fee_brackets(Broker, ValidFrom, ValidTo);
 
 CREATE TABLE financial_engine.bmf_fee_configs (
     Id BIGSERIAL PRIMARY KEY,
     Broker INT NOT NULL,
-    Trader VARCHAR(100) NULL,
+    Trader VARCHAR(100) NULL,           -- NULL = regra padrao; preenchido = regra especial da chave
+    KeyType VARCHAR(10) NULL,           -- TRADER | ENTITY (NULL sse Trader NULL)
     ValidFrom DATE NOT NULL,
     ValidTo DATE NOT NULL,
     ValorMini DECIMAL(10,4) NOT NULL,
@@ -66,17 +78,20 @@ CREATE TABLE financial_engine.bmf_fee_configs (
     CapMensal DECIMAL(18,2) NULL,       -- NULL = sem teto
     IsActive BOOLEAN NOT NULL DEFAULT TRUE,
     CreatedAt TIMESTAMP NOT NULL DEFAULT NOW(),
-    UpdatedAt TIMESTAMP NOT NULL DEFAULT NOW()
+    UpdatedAt TIMESTAMP NOT NULL DEFAULT NOW(),
+    CONSTRAINT bmf_fee_configs_keytype_ck CHECK (
+        (Trader IS NULL AND KeyType IS NULL) OR (Trader IS NOT NULL AND KeyType IN ('TRADER', 'ENTITY')))
 );
 
 CREATE INDEX idx_bmf_fee_configs_broker ON financial_engine.bmf_fee_configs(Broker);
-CREATE INDEX idx_bmf_fee_configs_trader ON financial_engine.bmf_fee_configs(Broker, Trader);
+CREATE INDEX idx_bmf_fee_configs_trader ON financial_engine.bmf_fee_configs(Broker, KeyType, Trader);
 CREATE INDEX idx_bmf_fee_configs_validity ON financial_engine.bmf_fee_configs(Broker, ValidFrom, ValidTo);
 
 CREATE TABLE financial_engine.daily_billing (
     Id BIGSERIAL PRIMARY KEY,
     Broker INT NOT NULL,
-    Trader VARCHAR(100) NOT NULL,
+    Trader VARCHAR(100) NOT NULL,       -- BillingKey: EnteringTrader ou Entity (ver KeyType)
+    KeyType VARCHAR(10) NOT NULL CHECK (KeyType IN ('TRADER', 'ENTITY')),
     TradeDate DATE NOT NULL,
     AssetClass VARCHAR(20) NOT NULL,
     TotalNotional DECIMAL(18,2) NOT NULL DEFAULT 0,
@@ -90,9 +105,9 @@ CREATE TABLE financial_engine.daily_billing (
     CalculatedAt TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE UNIQUE INDEX idx_daily_billing_unique ON financial_engine.daily_billing(Broker, Trader, TradeDate, AssetClass);
+CREATE UNIQUE INDEX idx_daily_billing_unique ON financial_engine.daily_billing(Broker, KeyType, Trader, TradeDate, AssetClass);
 CREATE INDEX idx_daily_billing_date ON financial_engine.daily_billing(TradeDate);
-CREATE INDEX idx_daily_billing_month ON financial_engine.daily_billing(Broker, Trader, AssetClass, TradeDate);
+CREATE INDEX idx_daily_billing_month ON financial_engine.daily_billing(Broker, KeyType, Trader, AssetClass, TradeDate);
 
 CREATE TABLE financial_engine.order_billing (
     Id BIGSERIAL PRIMARY KEY,
@@ -100,6 +115,7 @@ CREATE TABLE financial_engine.order_billing (
     DailyBillingId BIGINT NOT NULL REFERENCES financial_engine.daily_billing(Id) ON DELETE CASCADE,
     Broker INT NOT NULL,
     Trader VARCHAR(100) NOT NULL,
+    KeyType VARCHAR(10) NOT NULL CHECK (KeyType IN ('TRADER', 'ENTITY')),
     TradeDate DATE NOT NULL,
     AssetClass VARCHAR(20) NOT NULL,
     Notional DECIMAL(18,2) NOT NULL DEFAULT 0,
@@ -172,17 +188,17 @@ CREATE INDEX idx_fixed_monthly_fees_validity ON financial_engine.fixed_monthly_f
 
 -- Market Data: cobranca mensal por usuario (EnteringTrader) com conta vinculada ao broker.
 -- Vinculos vem de API externa (so estado atual) -> snapshot diario.
-CREATE TABLE IF NOT EXISTS financial_engine.user_exchange_account_snapshots (
+CREATE TABLE financial_engine.user_exchange_account_snapshots (
     SnapshotDate DATE NOT NULL,
     Broker INT NOT NULL,
     Trader VARCHAR(100) NOT NULL,
     CONSTRAINT user_exchange_account_snapshots_pk PRIMARY KEY (SnapshotDate, Broker, Trader)
 );
 
-CREATE INDEX IF NOT EXISTS idx_user_exchange_account_snapshots_broker_date
+CREATE INDEX idx_user_exchange_account_snapshots_broker_date
     ON financial_engine.user_exchange_account_snapshots(Broker, SnapshotDate);
 
-CREATE TABLE IF NOT EXISTS financial_engine.market_data_fee_configs (
+CREATE TABLE financial_engine.market_data_fee_configs (
     Id BIGSERIAL PRIMARY KEY,
     Broker INT NOT NULL,
     AmountPerUser DECIMAL(18,2) NOT NULL,
@@ -193,11 +209,11 @@ CREATE TABLE IF NOT EXISTS financial_engine.market_data_fee_configs (
     UpdatedAt TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_market_data_fee_configs_validity
+CREATE INDEX idx_market_data_fee_configs_validity
     ON financial_engine.market_data_fee_configs(Broker, ValidFrom, ValidTo);
 
 -- Usuarios nao cobrados (administrativos, de API...). Broker NULL = todos os brokers.
-CREATE TABLE IF NOT EXISTS financial_engine.market_data_exclusions (
+CREATE TABLE financial_engine.market_data_exclusions (
     Id BIGSERIAL PRIMARY KEY,
     Broker INT NULL,
     Trader VARCHAR(100) NOT NULL,
@@ -207,11 +223,11 @@ CREATE TABLE IF NOT EXISTS financial_engine.market_data_exclusions (
     UpdatedAt TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_market_data_exclusions_unique
+CREATE UNIQUE INDEX idx_market_data_exclusions_unique
     ON financial_engine.market_data_exclusions(COALESCE(Broker, 0), UPPER(Trader)) WHERE IsActive = TRUE;
 
 -- Apuracao mensal congelada (um registro por usuario cobrado)
-CREATE TABLE IF NOT EXISTS financial_engine.market_data_billing (
+CREATE TABLE financial_engine.market_data_billing (
     Id BIGSERIAL PRIMARY KEY,
     Broker INT NOT NULL,
     Year INT NOT NULL,
@@ -223,44 +239,9 @@ CREATE TABLE IF NOT EXISTS financial_engine.market_data_billing (
     CONSTRAINT market_data_billing_unique UNIQUE (Broker, Year, Month, Trader)
 );
 
-CREATE OR REPLACE VIEW financial_engine.vw_daily_billing_summary AS
-SELECT
-    Broker, Trader, TradeDate, AssetClass,
-    SUM(TotalNotional) as TotalNotional,
-    SUM(TotalQty) as TotalQty,
-    SUM(TotalFee) as TotalFee
-FROM financial_engine.daily_billing
-GROUP BY Broker, Trader, TradeDate, AssetClass;
-
-CREATE OR REPLACE VIEW financial_engine.vw_monthly_billing_summary AS
-SELECT
-    Broker, Trader,
-    DATE_TRUNC('month', TradeDate) as BillingMonth,
-    AssetClass,
-    SUM(TotalNotional) as TotalNotional,
-    SUM(TotalQty) as TotalQty,
-    SUM(TotalFee) as TotalFee,
-    COUNT(DISTINCT TradeDate) as TradingDays
-FROM financial_engine.daily_billing
-GROUP BY Broker, Trader, DATE_TRUNC('month', TradeDate), AssetClass;
-
-CREATE OR REPLACE VIEW financial_engine.vw_monthly_billing_by_broker AS
-SELECT
-    Broker,
-    DATE_TRUNC('month', TradeDate) as BillingMonth,
-    AssetClass,
-    COUNT(DISTINCT Trader) as TraderCount,
-    SUM(TotalNotional) as TotalNotional,
-    SUM(TotalQty) as TotalQty,
-    SUM(TotalFee) as TotalFee
-FROM financial_engine.daily_billing
-GROUP BY Broker, DATE_TRUNC('month', TradeDate), AssetClass;
-
 -- ============================================
--- Schema history (ordens de sistema externo)
+-- 3. Tabelas history (ordens de sistema externo)
 -- ============================================
-CREATE SCHEMA IF NOT EXISTS history AUTHORIZATION "admin";
-
 CREATE TABLE history.orders (
     Id BIGSERIAL PRIMARY KEY,
     CumQty DECIMAL(18,4) NOT NULL,
@@ -300,7 +281,43 @@ CREATE TABLE history.trades (
 
 CREATE INDEX idx_trades_orderid_date ON history.trades(OrderId, businessDate);
 
-CREATE OR REPLACE VIEW history.vw_billable_orders AS
+-- ============================================
+-- 4. Views (depois de todas as tabelas)
+-- ============================================
+CREATE VIEW financial_engine.vw_daily_billing_summary AS
+SELECT
+    Broker, Trader, KeyType, TradeDate, AssetClass,
+    SUM(TotalNotional) as TotalNotional,
+    SUM(TotalQty) as TotalQty,
+    SUM(TotalFee) as TotalFee
+FROM financial_engine.daily_billing
+GROUP BY Broker, Trader, KeyType, TradeDate, AssetClass;
+
+CREATE VIEW financial_engine.vw_monthly_billing_summary AS
+SELECT
+    Broker, Trader, KeyType,
+    DATE_TRUNC('month', TradeDate) as BillingMonth,
+    AssetClass,
+    SUM(TotalNotional) as TotalNotional,
+    SUM(TotalQty) as TotalQty,
+    SUM(TotalFee) as TotalFee,
+    COUNT(DISTINCT TradeDate) as TradingDays
+FROM financial_engine.daily_billing
+GROUP BY Broker, Trader, KeyType, DATE_TRUNC('month', TradeDate), AssetClass;
+
+CREATE VIEW financial_engine.vw_monthly_billing_by_broker AS
+SELECT
+    Broker,
+    DATE_TRUNC('month', TradeDate) as BillingMonth,
+    AssetClass,
+    COUNT(DISTINCT (KeyType, UPPER(Trader))) as TraderCount,
+    SUM(TotalNotional) as TotalNotional,
+    SUM(TotalQty) as TotalQty,
+    SUM(TotalFee) as TotalFee
+FROM financial_engine.daily_billing
+GROUP BY Broker, DATE_TRUNC('month', TradeDate), AssetClass;
+
+CREATE VIEW history.vw_billable_orders AS
 
 -- Non-GTC/GTD ou non-EQUITY: passthrough
 SELECT Id, CumQty, AvgPx, Symbol, ExchangeSymbol, AssetClass,
@@ -327,3 +344,5 @@ WHERE o.TimeInForce IN ('GTC', 'GTD')
 GROUP BY o.Id, o.Symbol, o.ExchangeSymbol, o.AssetClass,
          o.EnteringTrader, o.Entity, o.TradeDate, o.EnteringFirm,
          o.OmsInstance, o.Side, o.businessDate, o.TimeInForce;
+
+COMMIT;

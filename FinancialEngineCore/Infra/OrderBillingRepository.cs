@@ -16,25 +16,6 @@ public class OrderBillingRepository
     }
 
     /// <summary>
-    /// Insere múltiplos registros de billing por ordem (bulk insert).
-    /// </summary>
-    public async Task InsertBatchAsync(
-        IEnumerable<OrderBilling> orderBillings,
-        CancellationToken cancellationToken)
-    {
-        const string sql = @"
-            INSERT INTO financial_engine.order_billing
-                (OrderId, DailyBillingId, Broker, Trader, TradeDate,
-                 AssetClass, Notional, Qty, FeeAmount)
-            VALUES
-                (@OrderId, @DailyBillingId, @Broker, @Trader, @TradeDate,
-                 @AssetClass, @Notional, @Qty, @FeeAmount)";
-
-        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
-        await conn.ExecuteAsync(sql, orderBillings);
-    }
-
-    /// <summary>
     /// Insere múltiplos registros de billing por ordem via binary COPY (1 round-trip).
     /// Participa da transação aberta na conexão.
     /// </summary>
@@ -48,7 +29,7 @@ public class OrderBillingRepository
 
         const string copy = @"
             COPY financial_engine.order_billing
-                (OrderId, DailyBillingId, Broker, Trader, TradeDate,
+                (OrderId, DailyBillingId, Broker, Trader, KeyType, TradeDate,
                  AssetClass, Notional, Qty, FeeAmount)
             FROM STDIN (FORMAT BINARY)";
 
@@ -60,6 +41,7 @@ public class OrderBillingRepository
             await writer.WriteAsync(ob.DailyBillingId, NpgsqlDbType.Bigint, cancellationToken);
             await writer.WriteAsync(ob.Broker, NpgsqlDbType.Integer, cancellationToken);
             await writer.WriteAsync(ob.Trader, NpgsqlDbType.Varchar, cancellationToken);
+            await writer.WriteAsync(ob.KeyType, NpgsqlDbType.Varchar, cancellationToken);
             await writer.WriteAsync(ob.TradeDate, NpgsqlDbType.Date, cancellationToken);
             await writer.WriteAsync(ob.AssetClass, NpgsqlDbType.Varchar, cancellationToken);
             await writer.WriteAsync(ob.Notional, NpgsqlDbType.Numeric, cancellationToken);
@@ -112,7 +94,7 @@ public class OrderBillingRepository
         var monthEnd = monthStart.AddMonths(1);
 
         const string sql = @"
-            SELECT ob.OrderId, ob.Broker, ob.Trader, ob.TradeDate, ob.AssetClass,
+            SELECT ob.OrderId, ob.Broker, ob.Trader, ob.KeyType, ob.TradeDate, ob.AssetClass,
                    ob.Notional, ob.Qty, ob.FeeAmount,
                    o.Symbol, o.Side
             FROM financial_engine.order_billing ob
@@ -120,7 +102,7 @@ public class OrderBillingRepository
                 AND o.businessDate = to_char(ob.TradeDate, 'YYYY-MM-DD')
             WHERE ob.Broker = @BrokerId
               AND ob.TradeDate >= @MonthStart AND ob.TradeDate < @MonthEnd
-            ORDER BY ob.Trader, ob.AssetClass, ob.TradeDate, ob.OrderId";
+            ORDER BY ob.Trader, ob.KeyType, ob.AssetClass, ob.TradeDate, ob.OrderId";
 
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
         var result = await conn.QueryAsync<OrderBillingDetail>(sql, new

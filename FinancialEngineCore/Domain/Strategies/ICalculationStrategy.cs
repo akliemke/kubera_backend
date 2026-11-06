@@ -19,7 +19,7 @@ public interface ICalculationStrategy
     /// </summary>
     BillingCalculationResult Calculate(
         int brokerId,
-        string trader,
+        BillingKey billingKey,
         DateOnly tradeDate,
         IReadOnlyList<Order> orders,
         BrokerBillingContext context);

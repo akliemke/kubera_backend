@@ -16,97 +16,6 @@ public class DailyBillingRepository
     }
 
     /// <summary>
-    /// Busca o acumulado do mês para um (Trader, Broker, AssetClass) até uma data.
-    /// </summary>
-    public async Task<decimal> GetMonthAccumulatedAsync(
-        int brokerId,
-        string trader,
-        string assetClass,
-        DateOnly upToDate,
-        CancellationToken cancellationToken)
-    {
-        var monthStart = new DateOnly(upToDate.Year, upToDate.Month, 1);
-
-        const string sql = @"
-            SELECT COALESCE(SUM(
-                CASE WHEN @AssetClass = 'EQUITY' THEN TotalNotional ELSE TotalQty END
-            ), 0)
-            FROM financial_engine.daily_billing
-            WHERE Broker = @BrokerId
-              AND Trader = @Trader
-              AND AssetClass = @AssetClass
-              AND TradeDate >= @MonthStart
-              AND TradeDate < @UpToDate";
-
-        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
-        return await conn.QuerySingleAsync<decimal>(sql, new
-        {
-            BrokerId = brokerId,
-            Trader = trader,
-            AssetClass = assetClass,
-            MonthStart = monthStart,
-            UpToDate = upToDate
-        });
-    }
-
-    /// <summary>
-    /// Busca o fee já cobrado no mês para um (Trader, Broker, AssetClass) até uma data.
-    /// Usado para aplicar CAPs mensais (BMF).
-    /// </summary>
-    public async Task<decimal> GetMonthFeeChargedAsync(
-        int brokerId,
-        string trader,
-        string assetClass,
-        DateOnly upToDate,
-        CancellationToken cancellationToken)
-    {
-        var monthStart = new DateOnly(upToDate.Year, upToDate.Month, 1);
-
-        const string sql = @"
-            SELECT COALESCE(SUM(TotalFee), 0)
-            FROM financial_engine.daily_billing
-            WHERE Broker = @BrokerId
-              AND Trader = @Trader
-              AND AssetClass = @AssetClass
-              AND TradeDate >= @MonthStart
-              AND TradeDate < @UpToDate";
-
-        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
-        return await conn.QuerySingleAsync<decimal>(sql, new
-        {
-            BrokerId = brokerId,
-            Trader = trader,
-            AssetClass = assetClass,
-            MonthStart = monthStart,
-            UpToDate = upToDate
-        });
-    }
-
-    /// <summary>
-    /// Insere um novo registro de billing diário.
-    /// </summary>
-    public async Task<long> InsertAsync(DailyBilling billing, CancellationToken cancellationToken)
-    {
-        const string sql = @"
-            INSERT INTO financial_engine.daily_billing
-                (Broker, Trader, TradeDate, AssetClass,
-                 TotalNotional, TotalQty, TotalFee,
-                 AccumulatedBefore, AccumulatedAfter,
-                 EquityConfigId, BmfConfigId,
-                 ProcessBillingId, CalculatedAt)
-            VALUES
-                (@Broker, @Trader, @TradeDate, @AssetClass,
-                 @TotalNotional, @TotalQty, @TotalFee,
-                 @AccumulatedBefore, @AccumulatedAfter,
-                 @EquityConfigId, @BmfConfigId,
-                 @ProcessBillingId, @CalculatedAt)
-            RETURNING Id";
-
-        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
-        return await conn.QuerySingleAsync<long>(sql, billing);
-    }
-
-    /// <summary>
     /// Deleta registros de um dia específico para reprocessamento.
     /// </summary>
     public async Task DeleteByDateAsync(
@@ -167,7 +76,7 @@ public class DailyBillingRepository
 
         const string copy = @"
             COPY financial_engine.daily_billing
-                (Id, Broker, Trader, TradeDate, AssetClass,
+                (Id, Broker, Trader, KeyType, TradeDate, AssetClass,
                  TotalNotional, TotalQty, TotalFee,
                  AccumulatedBefore, AccumulatedAfter,
                  EquityConfigId, BmfConfigId,
@@ -181,6 +90,7 @@ public class DailyBillingRepository
             await writer.WriteAsync(b.Id, NpgsqlDbType.Bigint, cancellationToken);
             await writer.WriteAsync(b.Broker, NpgsqlDbType.Integer, cancellationToken);
             await writer.WriteAsync(b.Trader, NpgsqlDbType.Varchar, cancellationToken);
+            await writer.WriteAsync(b.KeyType, NpgsqlDbType.Varchar, cancellationToken);
             await writer.WriteAsync(b.TradeDate, NpgsqlDbType.Date, cancellationToken);
             await writer.WriteAsync(b.AssetClass, NpgsqlDbType.Varchar, cancellationToken);
             await writer.WriteAsync(b.TotalNotional, NpgsqlDbType.Numeric, cancellationToken);
@@ -206,33 +116,6 @@ public class DailyBillingRepository
     }
 
     /// <summary>
-    /// Deleta registros de um trader/broker/dia específico para reprocessamento.
-    /// </summary>
-    public async Task DeleteAsync(
-        int brokerId,
-        string trader,
-        DateOnly tradeDate,
-        string assetClass,
-        CancellationToken cancellationToken)
-    {
-        const string sql = @"
-            DELETE FROM financial_engine.daily_billing
-            WHERE Broker = @BrokerId
-              AND Trader = @Trader
-              AND TradeDate = @TradeDate
-              AND AssetClass = @AssetClass";
-
-        using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
-        await conn.ExecuteAsync(sql, new
-        {
-            BrokerId = brokerId,
-            Trader = trader,
-            TradeDate = tradeDate,
-            AssetClass = assetClass
-        });
-    }
-
-    /// <summary>
     /// Busca todos os registros de billing de um dia específico.
     /// </summary>
     public async Task<List<DailyBilling>> GetByDateAsync(
@@ -242,7 +125,7 @@ public class DailyBillingRepository
         const string sql = @"
             SELECT * FROM financial_engine.daily_billing
             WHERE TradeDate = @TradeDate
-            ORDER BY Broker, Trader, AssetClass";
+            ORDER BY Broker, Trader, KeyType, AssetClass";
 
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
         var result = await conn.QueryAsync<DailyBilling>(sql, new { TradeDate = tradeDate });
@@ -267,7 +150,7 @@ public class DailyBillingRepository
                 SUM(TotalNotional) as TotalNotional,
                 SUM(TotalQty) as TotalQty,
                 SUM(TotalFee) as TotalFee,
-                COUNT(DISTINCT Trader) as TraderCount,
+                COUNT(DISTINCT (KeyType, UPPER(Trader))) as TraderCount,
                 COUNT(DISTINCT TradeDate) as TradingDays
             FROM financial_engine.daily_billing
             WHERE TradeDate >= @MonthStart AND TradeDate < @MonthEnd
@@ -293,7 +176,7 @@ public class DailyBillingRepository
         var monthEnd = monthStart.AddMonths(1);
 
         const string sql = @"
-            SELECT Trader, AssetClass,
+            SELECT Trader, KeyType, AssetClass,
                    COALESCE(SUM(TotalNotional), 0) as TotalNotional,
                    COALESCE(SUM(TotalQty), 0) as TotalQty,
                    COALESCE(SUM(TotalFee), 0) as TotalFee
@@ -301,7 +184,7 @@ public class DailyBillingRepository
             WHERE Broker = @BrokerId
               AND TradeDate >= @MonthStart
               AND TradeDate < @MonthEnd
-            GROUP BY Trader, AssetClass";
+            GROUP BY Trader, KeyType, AssetClass";
 
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
         var result = await conn.QueryAsync<TraderMonthSummary>(sql, new
@@ -323,14 +206,14 @@ public class DailyBillingRepository
         CancellationToken cancellationToken)
     {
         const string sql = @"
-            SELECT Broker, Trader, EXTRACT(MONTH FROM TradeDate)::int as Month, '' as AssetClass,
+            SELECT Broker, Trader, KeyType, EXTRACT(MONTH FROM TradeDate)::int as Month, '' as AssetClass,
                    COALESCE(SUM(TotalNotional), 0) as TotalNotional,
                    COALESCE(SUM(TotalQty), 0) as TotalQty,
                    COALESCE(SUM(TotalFee), 0) as TotalFee
             FROM financial_engine.daily_billing
             WHERE TradeDate >= @From
               AND TradeDate < @ToExclusive
-            GROUP BY Broker, Trader, EXTRACT(MONTH FROM TradeDate)";
+            GROUP BY Broker, Trader, KeyType, EXTRACT(MONTH FROM TradeDate)";
 
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
         var result = await conn.QueryAsync<TraderMonthSummary>(sql, new
@@ -355,7 +238,7 @@ public class DailyBillingRepository
         var monthStart = new DateOnly(upToDate.Year, upToDate.Month, 1);
 
         const string sql = @"
-            SELECT Trader, AssetClass,
+            SELECT Trader, KeyType, AssetClass,
                    COALESCE(SUM(TotalNotional), 0) as TotalNotional,
                    COALESCE(SUM(TotalQty), 0) as TotalQty,
                    COALESCE(SUM(TotalFee), 0) as TotalFee
@@ -363,7 +246,7 @@ public class DailyBillingRepository
             WHERE Broker = @BrokerId
               AND TradeDate >= @MonthStart
               AND TradeDate < @UpToDate
-            GROUP BY Trader, AssetClass";
+            GROUP BY Trader, KeyType, AssetClass";
 
         var result = await conn.QueryAsync<TraderMonthSummary>(sql, new
         {
@@ -473,7 +356,7 @@ public class AnnualBillingSummary
 }
 
 /// <summary>
-/// Resumo mensal por (Trader, AssetClass) — usado para pre-load bulk.
+/// Resumo mensal por (Trader, KeyType, AssetClass) — usado para pre-load bulk.
 /// </summary>
 public class TraderMonthSummary
 {
@@ -482,6 +365,7 @@ public class TraderMonthSummary
     /// <summary>Preenchido apenas em consultas por período</summary>
     public int Month { get; set; }
     public required string Trader { get; set; }
+    public string KeyType { get; set; } = BillingKeyTypes.Trader;
     public required string AssetClass { get; set; }
     public decimal TotalNotional { get; set; }
     public decimal TotalQty { get; set; }

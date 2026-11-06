@@ -8,8 +8,8 @@ public class MonthlyRevenueCalculatorTests
 {
     private const int Year = 2024;
 
-    private static TraderMonthSummary Fee(int broker, int month, string key, decimal fee)
-        => new() { Broker = broker, Month = month, Trader = key, AssetClass = "", TotalFee = fee };
+    private static TraderMonthSummary Fee(int broker, int month, string key, decimal fee, string keyType = BillingKeyTypes.Trader)
+        => new() { Broker = broker, Month = month, Trader = key, KeyType = keyType, AssetClass = "", TotalFee = fee };
 
     private static FixedMonthlyFee Fixed(int broker, decimal amount, DateOnly from, DateOnly to)
         => new() { Broker = broker, Description = "Plataforma", Amount = amount, ValidFrom = from, ValidTo = to, IsActive = true };
@@ -22,7 +22,7 @@ public class MonthlyRevenueCalculatorTests
     {
         var result = MonthlyRevenueCalculator.Calculate(
             Year, [3],
-            [Fee(1, 3, "MESA_A", 400m), Fee(1, 3, "JOAO", 600m)],
+            [Fee(1, 3, "MESA_A", 400m, BillingKeyTypes.Entity), Fee(1, 3, "JOAO", 600m)],
             [Entity(1, "MESA_A", 1000m, new DateOnly(2024, 1, 1), new DateOnly(2099, 1, 1))],
             [Fixed(1, 250m, new DateOnly(2024, 1, 1), new DateOnly(2099, 1, 1))], []);
 
@@ -51,7 +51,7 @@ public class MonthlyRevenueCalculatorTests
         // Fixed fee valid only from March; floor config valid only until February
         var result = MonthlyRevenueCalculator.Calculate(
             Year, [2, 3],
-            [Fee(1, 2, "MESA_A", 100m), Fee(1, 3, "MESA_A", 100m)],
+            [Fee(1, 2, "MESA_A", 100m, BillingKeyTypes.Entity), Fee(1, 3, "MESA_A", 100m, BillingKeyTypes.Entity)],
             [Entity(1, "MESA_A", 1000m, new DateOnly(2024, 1, 1), new DateOnly(2024, 2, 29))],
             [Fixed(1, 250m, new DateOnly(2024, 3, 1), new DateOnly(2099, 1, 1))], []);
 
@@ -93,7 +93,7 @@ public class MonthlyRevenueCalculatorTests
         // Same entity name in two brokers: each broker's floor uses only its own fees/configs
         var result = MonthlyRevenueCalculator.Calculate(
             Year, [3],
-            [Fee(1, 3, "MESA_A", 900m), Fee(2, 3, "MESA_A", 100m)],
+            [Fee(1, 3, "MESA_A", 900m, BillingKeyTypes.Entity), Fee(2, 3, "MESA_A", 100m, BillingKeyTypes.Entity)],
             [Entity(1, "MESA_A", 1000m, new DateOnly(2024, 1, 1), new DateOnly(2099, 1, 1))],
             [], []);
 

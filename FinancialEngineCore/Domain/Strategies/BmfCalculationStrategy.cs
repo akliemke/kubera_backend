@@ -23,36 +23,36 @@ public class BmfCalculationStrategy : ICalculationStrategy
 
     public BillingCalculationResult Calculate(
         int brokerId,
-        string trader,
+        BillingKey billingKey,
         DateOnly tradeDate,
         IReadOnlyList<Order> orders,
         BrokerBillingContext context)
     {
-        var feeChargedInMonth = context.GetBmfFeeCharged(trader);
+        var feeChargedInMonth = context.GetBmfFeeCharged(billingKey);
 
         if (orders.Count == 0)
-            return CreateEmptyResult(brokerId, trader, tradeDate, orders, feeChargedInMonth);
+            return CreateEmptyResult(brokerId, billingKey, tradeDate, orders, feeChargedInMonth);
 
-        var config = context.GetBmfConfig(trader);
+        var config = context.GetBmfConfig(billingKey);
 
         if (config == null)
         {
             _logger.LogWarning(
-                "No BMF config found for broker {BrokerId}, trader {Trader}",
-                brokerId, trader);
+                "No BMF config found for broker {BrokerId}, billing key {BillingKey}",
+                brokerId, billingKey);
 
-            return CreateEmptyResult(brokerId, trader, tradeDate, orders, feeChargedInMonth);
+            return CreateEmptyResult(brokerId, billingKey, tradeDate, orders, feeChargedInMonth);
         }
 
         var result = Calculate(
             orders, config, feeChargedInMonth, tradeDate,
-            billingKey: trader, brokerId: brokerId);
+            billingKey: billingKey, brokerId: brokerId);
 
         if (result.UnknownSymbols.Count > 0)
         {
             _logger.LogWarning(
-                "Unclassified BMF contracts charged as zero for broker {BrokerId}, trader {Trader} on {Date}: {Symbols}",
-                brokerId, trader, tradeDate, string.Join(", ", result.UnknownSymbols));
+                "Unclassified BMF contracts charged as zero for broker {BrokerId}, billing key {BillingKey} on {Date}: {Symbols}",
+                brokerId, billingKey, tradeDate, string.Join(", ", result.UnknownSymbols));
         }
 
         return result;
@@ -70,10 +70,10 @@ public class BmfCalculationStrategy : ICalculationStrategy
         BmfFeeConfig config,
         decimal feeChargedInMonth,
         DateOnly tradeDate,
-        string? billingKey = null,
+        BillingKey? billingKey = null,
         int? brokerId = null)
     {
-        var trader = billingKey ?? orders[0].EnteringTrader;
+        var key = billingKey ?? BillingKey.Trader(orders[0].EnteringTrader);
         var broker = brokerId ?? int.Parse(orders[0].EnteringFirm);
 
         // Calcular quantidade total e fee por tipo de contrato
@@ -104,7 +104,8 @@ public class BmfCalculationStrategy : ICalculationStrategy
 
         return new BillingCalculationResult
         {
-            Trader = trader,
+            Trader = key.Key,
+            KeyType = key.Type,
             Broker = broker,
             TradeDate = tradeDate,
             AssetClass = "BMF",
@@ -272,14 +273,15 @@ public class BmfCalculationStrategy : ICalculationStrategy
 
     private BillingCalculationResult CreateEmptyResult(
         int brokerId,
-        string trader,
+        BillingKey billingKey,
         DateOnly tradeDate,
         IReadOnlyList<Order> orders,
         decimal feeChargedInMonth)
     {
         return new BillingCalculationResult
         {
-            Trader = trader,
+            Trader = billingKey.Key,
+            KeyType = billingKey.Type,
             Broker = brokerId,
             TradeDate = tradeDate,
             AssetClass = AssetClass,

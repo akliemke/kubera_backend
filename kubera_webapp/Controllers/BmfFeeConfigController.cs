@@ -43,6 +43,7 @@ public static class BmfFeeConfigController
             {
                 c.Id,
                 Trader = c.Trader ?? "(Padrão)",
+                c.KeyType,
                 c.ValidFrom,
                 c.ValidTo,
                 Mini = c.ValorMini,
@@ -74,6 +75,9 @@ public static class BmfFeeConfigController
             CancellationToken ct) =>
         {
             var validationErrors = ValidateCreateRequest(request);
+            var (trader, keyType, keyError) = BillingKeyTypes.NormalizeRuleKey(request.Trader, request.KeyType);
+            if (keyError is not null)
+                validationErrors.Add(keyError);
             if (validationErrors.Count > 0)
                 return Results.BadRequest(new { Errors = validationErrors });
 
@@ -84,7 +88,8 @@ public static class BmfFeeConfigController
             var config = new BmfFeeConfig
             {
                 Broker = request.Broker,
-                Trader = string.IsNullOrWhiteSpace(request.Trader) ? null : request.Trader,
+                Trader = trader,
+                KeyType = keyType,
                 ValidFrom = request.ValidFrom,
                 ValidTo = request.ValidTo,
                 ValorMini = request.ValorMini,
@@ -112,6 +117,10 @@ public static class BmfFeeConfigController
             if (string.IsNullOrWhiteSpace(request.Trader))
                 return Results.BadRequest(new { Error = "Trader é obrigatório" });
 
+            var (trader, keyType, keyError) = BillingKeyTypes.NormalizeRuleKey(request.Trader, request.KeyType ?? BillingKeyTypes.Trader);
+            if (keyError is not null)
+                return Results.BadRequest(new { Error = keyError });
+
             var defaultConfig = (await repository.GetByBrokerAsync(request.BrokerId, ct))
                 .FirstOrDefault(c => c.Trader == null);
 
@@ -121,7 +130,8 @@ public static class BmfFeeConfigController
             var newConfig = new BmfFeeConfig
             {
                 Broker = defaultConfig.Broker,
-                Trader = request.Trader,
+                Trader = trader,
+                KeyType = keyType,
                 ValidFrom = defaultConfig.ValidFrom,
                 ValidTo = defaultConfig.ValidTo,
                 ValorMini = defaultConfig.ValorMini,
@@ -138,7 +148,7 @@ public static class BmfFeeConfigController
             var created = await repository.CreateAsync(newConfig, ct);
             return Results.Ok(new
             {
-                Message = $"Configuração copiada para o trader {request.Trader}",
+                Message = $"Configuração copiada para {BillingKeyTypes.Label(keyType)} {trader}",
                 Config = created
             });
         })
@@ -156,15 +166,17 @@ public static class BmfFeeConfigController
                 return Results.NotFound(new { Error = "Configuração não encontrada", Id = id });
 
             var validationErrors = ValidateUpdateRequest(request);
+            var (trader, keyType, keyError) = BillingKeyTypes.NormalizeRuleKey(request.Trader, request.KeyType);
+            if (keyError is not null)
+                validationErrors.Add(keyError);
             if (validationErrors.Count > 0)
                 return Results.BadRequest(new { Errors = validationErrors });
-
-            var trader = string.IsNullOrWhiteSpace(request.Trader) ? null : request.Trader;
 
             var siblings = await repository.GetByBrokerAsync(existing.Broker, ct);
             var conflict = siblings.FirstOrDefault(c =>
                 c.Id != existing.Id &&
                 string.Equals(c.Trader, trader, StringComparison.OrdinalIgnoreCase) &&
+                c.KeyType == keyType &&
                 c.ValidFrom <= request.ValidTo && request.ValidFrom <= c.ValidTo);
 
             if (conflict is not null)
@@ -174,11 +186,12 @@ public static class BmfFeeConfigController
                     {
                         trader is null
                             ? "Já existe uma configuração padrão para este broker no período informado"
-                            : $"Já existe uma configuração para o trader {trader} neste broker no período informado"
+                            : $"Já existe uma configuração para {BillingKeyTypes.Label(keyType)} {trader} neste broker no período informado"
                     }
                 });
 
             existing.Trader = trader;
+            existing.KeyType = keyType;
             existing.ValidFrom = request.ValidFrom;
             existing.ValidTo = request.ValidTo;
             existing.ValorMini = request.ValorMini;
@@ -279,7 +292,8 @@ public record CreateBmfFeeConfigRequest(
     decimal DI1Venc6,
     decimal DI1Venc7,
     decimal DI1Venc8Plus,
-    decimal? CapMensal // NULL = sem teto
+    decimal? CapMensal, // NULL = sem teto
+    string? KeyType = null // TRADER | ENTITY, obrigatório quando Trader é informado
 );
 
 public record UpdateBmfFeeConfigRequest(
@@ -293,7 +307,8 @@ public record UpdateBmfFeeConfigRequest(
     decimal DI1Venc6,
     decimal DI1Venc7,
     decimal DI1Venc8Plus,
-    decimal? CapMensal // NULL = sem teto
+    decimal? CapMensal, // NULL = sem teto
+    string? KeyType = null // TRADER | ENTITY, obrigatório quando Trader é informado
 );
 
-public record CopyConfigToTraderRequest(int BrokerId, string Trader);
+public record CopyConfigToTraderRequest(int BrokerId, string Trader, string? KeyType = null); // KeyType padrão: TRADER

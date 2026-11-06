@@ -1,3 +1,5 @@
+using FinancialEngineCore.Model;
+
 namespace FinancialEngineCore.Domain;
 
 /// <summary>
@@ -6,6 +8,7 @@ namespace FinancialEngineCore.Domain;
 public class BillingCalculationResult
 {
     public required string Trader { get; init; }
+    public string KeyType { get; init; } = BillingKeyTypes.Trader;
     public int Broker { get; init; }
     public DateOnly TradeDate { get; init; }
     public required string AssetClass { get; init; }

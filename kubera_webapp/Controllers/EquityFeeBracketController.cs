@@ -39,9 +39,10 @@ public static class EquityFeeBracketController
             CancellationToken ct) =>
         {
             var brackets = await repository.GetByBrokerAsync(brokerId, ct);
-            var grouped = brackets.GroupBy(b => b.Trader ?? "(Padrão)").Select(g => new
+            var grouped = brackets.GroupBy(b => (Trader: b.Trader ?? "(Padrão)", b.KeyType)).Select(g => new
             {
-                Trader = g.Key,
+                g.Key.Trader,
+                g.Key.KeyType,
                 Brackets = g.OrderBy(b => b.NotionalFrom).Select(b => new
                 {
                     b.Id,
@@ -70,6 +71,9 @@ public static class EquityFeeBracketController
             CancellationToken ct) =>
         {
             var validationErrors = ValidateCreateRequest(request);
+            var (trader, keyType, keyError) = BillingKeyTypes.NormalizeRuleKey(request.Trader, request.KeyType);
+            if (keyError is not null)
+                validationErrors.Add(keyError);
             if (validationErrors.Count > 0)
                 return Results.BadRequest(new { Errors = validationErrors });
 
@@ -80,7 +84,8 @@ public static class EquityFeeBracketController
             var bracket = new EquityFeeBracket
             {
                 Broker = request.Broker,
-                Trader = string.IsNullOrWhiteSpace(request.Trader) ? null : request.Trader,
+                Trader = trader,
+                KeyType = keyType,
                 ValidFrom = request.ValidFrom,
                 ValidTo = request.ValidTo,
                 NotionalFrom = request.NotionalFrom,
@@ -104,6 +109,10 @@ public static class EquityFeeBracketController
             if (string.IsNullOrWhiteSpace(request.Trader))
                 return Results.BadRequest(new { Error = "Trader é obrigatório" });
 
+            var (trader, keyType, keyError) = BillingKeyTypes.NormalizeRuleKey(request.Trader, request.KeyType ?? BillingKeyTypes.Trader);
+            if (keyError is not null)
+                return Results.BadRequest(new { Error = keyError });
+
             var defaultBrackets = (await repository.GetByBrokerAsync(request.BrokerId, ct))
                 .Where(b => b.Trader == null)
                 .ToList();
@@ -117,7 +126,8 @@ public static class EquityFeeBracketController
                 var newBracket = new EquityFeeBracket
                 {
                     Broker = bracket.Broker,
-                    Trader = request.Trader,
+                    Trader = trader,
+                    KeyType = keyType,
                     ValidFrom = bracket.ValidFrom,
                     ValidTo = bracket.ValidTo,
                     NotionalFrom = bracket.NotionalFrom,
@@ -132,7 +142,7 @@ public static class EquityFeeBracketController
 
             return Results.Ok(new
             {
-                Message = $"Copiadas {created.Count} faixas para o trader {request.Trader}",
+                Message = $"Copiadas {created.Count} faixas para {BillingKeyTypes.Label(keyType)} {trader}",
                 Brackets = created
             });
         })
@@ -229,7 +239,8 @@ public record CreateEquityFeeBracketRequest(
     decimal NotionalFrom,
     decimal? NotionalTo,
     decimal Bps,
-    decimal? Cap // NULL = sem teto
+    decimal? Cap, // NULL = sem teto
+    string? KeyType = null // TRADER | ENTITY, obrigatório quando Trader é informado
 );
 
 public record UpdateEquityFeeBracketRequest(
@@ -241,4 +252,4 @@ public record UpdateEquityFeeBracketRequest(
     decimal? Cap // NULL = sem teto
 );
 
-public record CopyBracketsToTraderRequest(int BrokerId, string Trader);
+public record CopyBracketsToTraderRequest(int BrokerId, string Trader, string? KeyType = null); // KeyType padrão: TRADER

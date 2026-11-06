@@ -172,28 +172,36 @@ public class BillingProcessingService : IBillingProcessingService
         // Resolve billing key: entity-based or trader-based (canonical casing)
         var entityKeyMap = BuildEntityKeyMap((await entityConfigsTask).Select(c => c.Entity));
 
-        // Group by (BillingKey, AssetClass), case-insensitive, and calculate everything in memory
+        // Group by (AssetClass, BillingKey), case-insensitive, and calculate everything in memory.
+        // AssetClass first: a trader's special rule is per asset class
         sw.Restart();
         var results = new List<BillingCalculationResult>();
         var groupedOrders = brokerOrders
-            .GroupBy(order => ResolveBillingKey(order, entityKeyMap), StringComparer.OrdinalIgnoreCase)
-            .SelectMany(byKey => byKey
-                .GroupBy(order => order.AssetClass, StringComparer.OrdinalIgnoreCase)
-                .Select(byClass => (BillingKey: byKey.Key, AssetClass: byClass.Key, Orders: byClass.ToList())));
+            .GroupBy(order => order.AssetClass, StringComparer.OrdinalIgnoreCase)
+            .SelectMany(byClass => byClass
+                .GroupBy(order => ResolveBillingKey(order, entityKeyMap, context.HasTraderSpecialRule))
+                .Select(byKey => (BillingKey: byKey.Key, AssetClass: byClass.Key, Orders: byKey.ToList())));
 
-        foreach (var (trader, assetClass, orders) in groupedOrders)
+        foreach (var (billingKey, assetClass, orders) in groupedOrders)
         {
             var strategy = _strategyRegistry.GetStrategy(assetClass);
 
             if (strategy == null)
             {
                 _logger.LogWarning(
-                    "No calculation strategy found for AssetClass {AssetClass}, trader {Trader}",
-                    assetClass, trader);
+                    "No calculation strategy found for AssetClass {AssetClass}, billing key {BillingKey}",
+                    assetClass, billingKey);
                 continue;
             }
 
-            results.Add(strategy.Calculate(brokerId, trader, tradeDate, orders, context));
+            if (billingKey.Type == BillingKeyTypes.Trader && orders.Any(o => entityKeyMap.ContainsKey(o.Entity)))
+            {
+                _logger.LogInformation(
+                    "Broker {BrokerId} {Date}: trader {Trader} has its own {AssetClass} special rule and is billed outside its entity",
+                    brokerId, tradeDate, billingKey.Key, assetClass);
+            }
+
+            results.Add(strategy.Calculate(brokerId, billingKey, tradeDate, orders, context));
         }
         var calcMs = sw.ElapsedMilliseconds;
 
@@ -234,6 +242,7 @@ public class BillingProcessingService : IBillingProcessingService
                 Id = dailyBillingId,
                 Broker = result.Broker,
                 Trader = result.Trader,
+                KeyType = result.KeyType,
                 TradeDate = result.TradeDate,
                 AssetClass = result.AssetClass,
                 TotalNotional = result.TotalNotional,
@@ -253,6 +262,7 @@ public class BillingProcessingService : IBillingProcessingService
                 DailyBillingId = dailyBillingId,
                 Broker = result.Broker,
                 Trader = result.Trader,
+                KeyType = result.KeyType,
                 TradeDate = result.TradeDate,
                 AssetClass = result.AssetClass,
                 Notional = of.Notional,
@@ -293,12 +303,22 @@ public class BillingProcessingService : IBillingProcessingService
         return map;
     }
 
-    internal static string ResolveBillingKey(Order order, IReadOnlyDictionary<string, string> entityKeyMap)
+    /// <summary>
+    /// TRADER key if the trader has its own special rule for the order's asset class
+    /// (special rule prevails over the entity), else ENTITY key if the entity is configured, else TRADER key.
+    /// </summary>
+    /// <param name="hasTraderSpecialRule">(trader, assetClass) -> trader has a TRADER special rule valid on the day</param>
+    internal static BillingKey ResolveBillingKey(
+        Order order,
+        IReadOnlyDictionary<string, string> entityKeyMap,
+        Func<string, string, bool>? hasTraderSpecialRule = null)
     {
-        if (entityKeyMap.Count > 0 && entityKeyMap.TryGetValue(order.Entity, out var canonicalEntity))
-            return canonicalEntity;
+        if (entityKeyMap.Count > 0
+            && entityKeyMap.TryGetValue(order.Entity, out var canonicalEntity)
+            && hasTraderSpecialRule?.Invoke(order.EnteringTrader, order.AssetClass) != true)
+            return BillingKey.Entity(canonicalEntity);
 
-        return order.EnteringTrader;
+        return BillingKey.Trader(order.EnteringTrader);
     }
 
     private static List<int> ParseBrokerIds(string processBroker)

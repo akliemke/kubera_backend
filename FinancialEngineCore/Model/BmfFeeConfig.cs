@@ -13,9 +13,12 @@ public class BmfFeeConfig
 
     /// <summary>
     /// Se NULL = regra padrão do broker.
-    /// Se preenchido = regra especial 100% custom para este trader.
+    /// Se preenchido = regra especial 100% custom para esta chave (trader ou entity, ver KeyType).
     /// </summary>
     public string? Trader { get; set; }
+
+    /// <summary>Tipo da regra especial: TRADER ou ENTITY (NULL quando Trader é NULL)</summary>
+    public string? KeyType { get; set; }
 
     public DateOnly ValidFrom { get; set; }
     public DateOnly ValidTo { get; set; }

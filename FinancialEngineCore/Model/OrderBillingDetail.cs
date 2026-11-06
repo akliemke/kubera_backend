@@ -8,6 +8,8 @@ public class OrderBillingDetail
     public long OrderId { get; set; }
     public int Broker { get; set; }
     public required string Trader { get; set; }
+    /// <summary>Tipo da chave: TRADER (Trader = EnteringTrader) ou ENTITY (Trader = Entity)</summary>
+    public string KeyType { get; set; } = BillingKeyTypes.Trader;
     public DateOnly TradeDate { get; set; }
     public required string AssetClass { get; set; }
     public decimal Notional { get; set; }

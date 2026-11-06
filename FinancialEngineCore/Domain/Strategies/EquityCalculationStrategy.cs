@@ -12,7 +12,7 @@ public class EquityCalculationStrategy : ICalculationStrategy
 
     public BillingCalculationResult Calculate(
         int brokerId,
-        string trader,
+        BillingKey billingKey,
         DateOnly tradeDate,
         IReadOnlyList<Order> orders,
         BrokerBillingContext context)
@@ -21,7 +21,8 @@ public class EquityCalculationStrategy : ICalculationStrategy
         {
             return new BillingCalculationResult
             {
-                Trader = trader,
+                Trader = billingKey.Key,
+                KeyType = billingKey.Type,
                 Broker = brokerId,
                 TradeDate = tradeDate,
                 AssetClass = AssetClass,
@@ -37,11 +38,11 @@ public class EquityCalculationStrategy : ICalculationStrategy
 
         return Calculate(
             orders,
-            context.GetEquityBrackets(trader),
-            context.GetEquityAccumulated(trader),
-            context.GetFeePerBracket(trader),
+            context.GetEquityBrackets(billingKey),
+            context.GetEquityAccumulated(billingKey),
+            context.GetFeePerBracket(billingKey),
             context.PriceFactors,
-            billingKey: trader,
+            billingKey: billingKey,
             brokerId: brokerId);
     }
 
@@ -59,10 +60,10 @@ public class EquityCalculationStrategy : ICalculationStrategy
         decimal accumulatedBefore,
         IReadOnlyDictionary<decimal, decimal> feeChargedPerBracket,
         IReadOnlyDictionary<string, decimal> priceFactors,
-        string? billingKey = null,
+        BillingKey? billingKey = null,
         int? brokerId = null)
     {
-        var trader = billingKey ?? orders[0].EnteringTrader;
+        var key = billingKey ?? BillingKey.Trader(orders[0].EnteringTrader);
         var broker = brokerId ?? int.Parse(orders[0].EnteringFirm);
         var tradeDate = orders[0].TradeDate;
 
@@ -82,7 +83,8 @@ public class EquityCalculationStrategy : ICalculationStrategy
 
         return new BillingCalculationResult
         {
-            Trader = trader,
+            Trader = key.Key,
+            KeyType = key.Type,
             Broker = broker,
             TradeDate = tradeDate,
             AssetClass = "EQUITY",

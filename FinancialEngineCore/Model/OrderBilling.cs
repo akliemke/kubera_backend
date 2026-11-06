@@ -16,6 +16,8 @@ public class OrderBilling
 
     public int Broker { get; set; }
     public required string Trader { get; set; }
+    /// <summary>Tipo da chave: TRADER (Trader = EnteringTrader) ou ENTITY (Trader = Entity)</summary>
+    public string KeyType { get; set; } = BillingKeyTypes.Trader;
     public DateOnly TradeDate { get; set; }
 
     /// <summary>"EQUITY" ou "BMF"</summary>
