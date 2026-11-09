@@ -248,8 +248,7 @@ CREATE TABLE history.orders (
     Id BIGSERIAL PRIMARY KEY,
     CumQty DECIMAL(18,4) NOT NULL,
     AvgPx DECIMAL(18,6) NOT NULL,
-    Symbol VARCHAR(50) NOT NULL,        -- ex: PETR4, WINZ25, DI1F27, BTGDOLZ26 (sintetico)
-    Asset VARCHAR(50) NULL,             -- raiz do ativo: PETR, WIN, DI1, DOL (AssetClass e deduzida no codigo)
+    Symbol VARCHAR(50) NOT NULL,        -- ex: PETR4, WINZ25, DI1F27, BTGDOLZ26 (sintetico). Raiz (Asset) so existe nos trades
     EnteringTrader VARCHAR(100) NOT NULL,
     Entity VARCHAR(100) NOT NULL,
     TradeDate DATE NOT NULL,
@@ -270,7 +269,7 @@ CREATE TABLE history.trades (
     LastPx DECIMAL(18,6) NOT NULL,      -- LastQty no padrao do contrato cheio (sintetico: 0,2 WDO = 1 mini)
     UniqueTradeId VARCHAR(100) NULL,    -- sintetico: sufixo indica a perna (1234-WDO, 321-DOL)
     Symbol VARCHAR(50) NOT NULL,
-    Asset VARCHAR(50) NULL,
+    Asset VARCHAR(50) NULL,             -- raiz do ativo: PETR, WIN, DI1, DOL (AssetClass e deduzida no codigo)
     EnteringTrader VARCHAR(100) NOT NULL,
     Entity VARCHAR(100) NOT NULL,
     TradeDate DATE NOT NULL,
@@ -319,16 +318,22 @@ FROM financial_engine.daily_billing
 GROUP BY Broker, DATE_TRUNC('month', TradeDate), AssetClass;
 
 -- Ordens cobraveis do dia. AssetClass nao existe na base: e deduzida no codigo (AssetClassifier) por Asset/Symbol.
--- Sintetico = Symbol que nao comeca com o Asset (ex: BTGDOLZ26, Asset DOL).
+-- history.orders nao tem Asset: a raiz vem do primeiro trade da ordem (ta). Ordem sem trade -> Asset NULL
+-- (o codigo deduz pelo Symbol). Sintetico = Symbol que nao comeca com o Asset dos trades (ex: BTGDOLZ26, Asset DOL).
 CREATE VIEW history.vw_billable_orders AS
 
 -- Ordem normal (nao GTC/GTD, nao sintetico): passthrough
-SELECT Id, CumQty, AvgPx, Symbol, Asset,
-       EnteringTrader, Entity, TradeDate, EnteringFirm, OmsInstance, Side,
-       businessDate, TimeInForce
-FROM history.orders
-WHERE (TimeInForce IS NULL OR TimeInForce NOT IN ('GTC', 'GTD'))
-  AND (Asset IS NULL OR Symbol LIKE Asset || '%')
+SELECT o.Id, o.CumQty, o.AvgPx, o.Symbol, ta.Asset,
+       o.EnteringTrader, o.Entity, o.TradeDate, o.EnteringFirm, o.OmsInstance, o.Side,
+       o.businessDate, o.TimeInForce
+FROM history.orders o
+LEFT JOIN LATERAL (
+    SELECT t.Asset FROM history.trades t
+    WHERE t.OrderId = o.Id AND t.Asset IS NOT NULL
+    ORDER BY t.Id LIMIT 1
+) ta ON TRUE
+WHERE (o.TimeInForce IS NULL OR o.TimeInForce NOT IN ('GTC', 'GTD'))
+  AND (ta.Asset IS NULL OR o.Symbol LIKE ta.Asset || '%')
 
 UNION ALL
 
@@ -336,14 +341,19 @@ UNION ALL
 SELECT o.Id,
        SUM(t.LastQty) as CumQty,
        SUM(t.LastQty * t.LastPx) / SUM(t.LastQty) as AvgPx,
-       o.Symbol, o.Asset,
+       o.Symbol, ta.Asset,
        o.EnteringTrader, o.Entity, o.TradeDate, o.EnteringFirm,
        o.OmsInstance, o.Side, o.businessDate, o.TimeInForce
 FROM history.orders o
 INNER JOIN history.trades t ON t.OrderId = o.Id AND t.businessDate = o.businessDate
+LEFT JOIN LATERAL (
+    SELECT t2.Asset FROM history.trades t2
+    WHERE t2.OrderId = o.Id AND t2.Asset IS NOT NULL
+    ORDER BY t2.Id LIMIT 1
+) ta ON TRUE
 WHERE o.TimeInForce IN ('GTC', 'GTD')
-  AND (o.Asset IS NULL OR o.Symbol LIKE o.Asset || '%')
-GROUP BY o.Id, o.Symbol, o.Asset,
+  AND (ta.Asset IS NULL OR o.Symbol LIKE ta.Asset || '%')
+GROUP BY o.Id, o.Symbol, ta.Asset,
          o.EnteringTrader, o.Entity, o.TradeDate, o.EnteringFirm,
          o.OmsInstance, o.Side, o.businessDate, o.TimeInForce
 
@@ -360,12 +370,15 @@ SELECT o.Id,
        o.OmsInstance, o.Side, o.businessDate, o.TimeInForce
 FROM history.orders o
 INNER JOIN history.trades t ON t.OrderId = o.Id AND t.businessDate = o.businessDate
+INNER JOIN LATERAL (
+    SELECT t2.Asset FROM history.trades t2
+    WHERE t2.OrderId = o.Id AND t2.Asset IS NOT NULL
+    ORDER BY t2.Id LIMIT 1
+) ta ON o.Symbol NOT LIKE ta.Asset || '%'
 CROSS JOIN LATERAL (
     SELECT COALESCE(UPPER(substring(t.UniqueTradeId from '-([^-]+)$')), '?') as Leg
 ) leg
 LEFT JOIN (VALUES ('WDO', 5), ('DOL', 1)) AS f(Leg, Factor) ON f.Leg = leg.Leg
-WHERE o.Asset IS NOT NULL
-  AND o.Symbol NOT LIKE o.Asset || '%'
 GROUP BY o.Id, leg.Leg, o.Symbol,
          o.EnteringTrader, o.Entity, o.TradeDate, o.EnteringFirm,
          o.OmsInstance, o.Side, o.businessDate, o.TimeInForce;

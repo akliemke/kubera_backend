@@ -67,47 +67,72 @@ VALUES
 -- ============================================
 
 -- Trader JOAO, EQUITY, 3 dias em janeiro
-INSERT INTO history.orders (Id, CumQty, AvgPx, Symbol, Asset, EnteringTrader, Entity, TradeDate, EnteringFirm, OmsInstance, Side, businessDate)
+INSERT INTO history.orders (Id, CumQty, AvgPx, Symbol, EnteringTrader, Entity, TradeDate, EnteringFirm, OmsInstance, Side, businessDate)
 VALUES
-(900001, 1000, 28.50, 'PETR4', 'PETR', 'JOAO', 'MESA1', '2026-01-06', '1', 'OMS1', 'BUY', '2026-01-06'),
-(900002, 2000, 58.30, 'VALE3', 'VALE', 'JOAO', 'MESA1', '2026-01-06', '1', 'OMS1', 'SELL', '2026-01-06'),
-(900003, 500,  33.20, 'ITUB4', 'ITUB', 'JOAO', 'MESA1', '2026-01-07', '1', 'OMS1', 'BUY', '2026-01-07'),
-(900004, 3000, 12.45, 'BBDC4', 'BBDC', 'JOAO', 'MESA1', '2026-01-07', '1', 'OMS1', 'BUY', '2026-01-07'),
-(900005, 1500, 28.80, 'PETR4', 'PETR', 'JOAO', 'MESA1', '2026-01-08', '1', 'OMS1', 'SELL', '2026-01-08'),
-(900006, 800,  95.10, 'WEGE3', 'WEGE', 'JOAO', 'MESA1', '2026-01-08', '1', 'OMS1', 'BUY', '2026-01-08');
+(900001, 1000, 28.50, 'PETR4', 'JOAO', 'MESA1', '2026-01-06', '1', 'OMS1', 'BUY', '2026-01-06'),
+(900002, 2000, 58.30, 'VALE3', 'JOAO', 'MESA1', '2026-01-06', '1', 'OMS1', 'SELL', '2026-01-06'),
+(900003, 500, 33.20, 'ITUB4', 'JOAO', 'MESA1', '2026-01-07', '1', 'OMS1', 'BUY', '2026-01-07'),
+(900004, 3000, 12.45, 'BBDC4', 'JOAO', 'MESA1', '2026-01-07', '1', 'OMS1', 'BUY', '2026-01-07'),
+(900005, 1500, 28.80, 'PETR4', 'JOAO', 'MESA1', '2026-01-08', '1', 'OMS1', 'SELL', '2026-01-08'),
+(900006, 800, 95.10, 'WEGE3', 'JOAO', 'MESA1', '2026-01-08', '1', 'OMS1', 'BUY', '2026-01-08');
 
 -- Trader MARIA, EQUITY, 2 dias
-INSERT INTO history.orders (Id, CumQty, AvgPx, Symbol, Asset, EnteringTrader, Entity, TradeDate, EnteringFirm, OmsInstance, Side, businessDate)
+INSERT INTO history.orders (Id, CumQty, AvgPx, Symbol, EnteringTrader, Entity, TradeDate, EnteringFirm, OmsInstance, Side, businessDate)
 VALUES
-(900007, 5000, 28.60, 'PETR4', 'PETR', 'MARIA', 'MESA2', '2026-01-06', '1', 'OMS1', 'BUY', '2026-01-06'),
-(900008, 1000, 45.70, 'ABEV3', 'ABEV', 'MARIA', 'MESA2', '2026-01-06', '1', 'OMS1', 'SELL', '2026-01-06'),
-(900009, 3000, 58.50, 'VALE3', 'VALE', 'MARIA', 'MESA2', '2026-01-08', '1', 'OMS1', 'BUY', '2026-01-08'),
-(900010, 2000, 11.30, 'MGLU3', 'MGLU', 'MARIA', 'MESA2', '2026-01-08', '1', 'OMS1', 'SELL', '2026-01-08');
+(900007, 5000, 28.60, 'PETR4', 'MARIA', 'MESA2', '2026-01-06', '1', 'OMS1', 'BUY', '2026-01-06'),
+(900008, 1000, 45.70, 'ABEV3', 'MARIA', 'MESA2', '2026-01-06', '1', 'OMS1', 'SELL', '2026-01-06'),
+(900009, 3000, 58.50, 'VALE3', 'MARIA', 'MESA2', '2026-01-08', '1', 'OMS1', 'BUY', '2026-01-08'),
+(900010, 2000, 11.30, 'MGLU3', 'MARIA', 'MESA2', '2026-01-08', '1', 'OMS1', 'SELL', '2026-01-08');
 
 -- Trader CARLOS, BMF, 2 dias
-INSERT INTO history.orders (Id, CumQty, AvgPx, Symbol, Asset, EnteringTrader, Entity, TradeDate, EnteringFirm, OmsInstance, Side, businessDate)
+INSERT INTO history.orders (Id, CumQty, AvgPx, Symbol, EnteringTrader, Entity, TradeDate, EnteringFirm, OmsInstance, Side, businessDate)
 VALUES
-(900011, 10, 126500.00, 'WINFEB26', 'WIN', 'CARLOS', 'MESA3', '2026-01-06', '1', 'OMS1', 'BUY', '2026-01-06'),
-(900012, 5,  126300.00, 'WINFEB26', 'WIN', 'CARLOS', 'MESA3', '2026-01-06', '1', 'OMS1', 'SELL', '2026-01-06'),
-(900013, 20, 126800.00, 'WINFEB26', 'WIN', 'CARLOS', 'MESA3', '2026-01-07', '1', 'OMS1', 'BUY', '2026-01-07'),
-(900014, 2,  5780.00,   'WDOFEB26', 'WDO', 'CARLOS', 'MESA3', '2026-01-07', '1', 'OMS1', 'SELL', '2026-01-07');
+(900011, 10, 126500.00, 'WINFEB26', 'CARLOS', 'MESA3', '2026-01-06', '1', 'OMS1', 'BUY', '2026-01-06'),
+(900012, 5, 126300.00, 'WINFEB26', 'CARLOS', 'MESA3', '2026-01-06', '1', 'OMS1', 'SELL', '2026-01-06'),
+(900013, 20, 126800.00, 'WINFEB26', 'CARLOS', 'MESA3', '2026-01-07', '1', 'OMS1', 'BUY', '2026-01-07'),
+(900014, 2, 5780.00, 'WDOFEB26', 'CARLOS', 'MESA3', '2026-01-07', '1', 'OMS1', 'SELL', '2026-01-07');
 
 -- ============================================
 -- ORDERS - history.orders (broker 3 - XP)
 -- ============================================
 
 -- Trader PEDRO, EQUITY
-INSERT INTO history.orders (Id, CumQty, AvgPx, Symbol, Asset, EnteringTrader, Entity, TradeDate, EnteringFirm, OmsInstance, Side, businessDate)
+INSERT INTO history.orders (Id, CumQty, AvgPx, Symbol, EnteringTrader, Entity, TradeDate, EnteringFirm, OmsInstance, Side, businessDate)
 VALUES
-(900015, 4000, 28.70, 'PETR4', 'PETR', 'PEDRO', 'MESAXP', '2026-01-06', '3', 'OMS2', 'BUY', '2026-01-06'),
-(900016, 1500, 33.40, 'ITUB4', 'ITUB', 'PEDRO', 'MESAXP', '2026-01-06', '3', 'OMS2', 'SELL', '2026-01-06'),
-(900017, 2500, 58.90, 'VALE3', 'VALE', 'PEDRO', 'MESAXP', '2026-01-07', '3', 'OMS2', 'BUY', '2026-01-07');
+(900015, 4000, 28.70, 'PETR4', 'PEDRO', 'MESAXP', '2026-01-06', '3', 'OMS2', 'BUY', '2026-01-06'),
+(900016, 1500, 33.40, 'ITUB4', 'PEDRO', 'MESAXP', '2026-01-06', '3', 'OMS2', 'SELL', '2026-01-06'),
+(900017, 2500, 58.90, 'VALE3', 'PEDRO', 'MESAXP', '2026-01-07', '3', 'OMS2', 'BUY', '2026-01-07');
 
 -- Trader ANA, BMF
-INSERT INTO history.orders (Id, CumQty, AvgPx, Symbol, Asset, EnteringTrader, Entity, TradeDate, EnteringFirm, OmsInstance, Side, businessDate)
+INSERT INTO history.orders (Id, CumQty, AvgPx, Symbol, EnteringTrader, Entity, TradeDate, EnteringFirm, OmsInstance, Side, businessDate)
 VALUES
+(900018, 50, 126400.00, 'INDFEB26', 'ANA', 'MESAXP', '2026-01-07', '3', 'OMS2', 'BUY', '2026-01-07'),
+(900019, 30, 5790.00, 'DOLFEB26', 'ANA', 'MESAXP', '2026-01-08', '3', 'OMS2', 'SELL', '2026-01-08');
+
+-- ============================================
+-- TRADES - history.trades (1 execucao por ordem; Asset = raiz, so existe nos trades)
+-- ============================================
+INSERT INTO history.trades (OrderId, LastQty, LastPx, Symbol, Asset, EnteringTrader, Entity, TradeDate, EnteringFirm, OmsInstance, Side, businessDate)
+VALUES
+(900001, 1000, 28.50, 'PETR4', 'PETR', 'JOAO', 'MESA1', '2026-01-06', '1', 'OMS1', 'BUY', '2026-01-06'),
+(900002, 2000, 58.30, 'VALE3', 'VALE', 'JOAO', 'MESA1', '2026-01-06', '1', 'OMS1', 'SELL', '2026-01-06'),
+(900003, 500, 33.20, 'ITUB4', 'ITUB', 'JOAO', 'MESA1', '2026-01-07', '1', 'OMS1', 'BUY', '2026-01-07'),
+(900004, 3000, 12.45, 'BBDC4', 'BBDC', 'JOAO', 'MESA1', '2026-01-07', '1', 'OMS1', 'BUY', '2026-01-07'),
+(900005, 1500, 28.80, 'PETR4', 'PETR', 'JOAO', 'MESA1', '2026-01-08', '1', 'OMS1', 'SELL', '2026-01-08'),
+(900006, 800, 95.10, 'WEGE3', 'WEGE', 'JOAO', 'MESA1', '2026-01-08', '1', 'OMS1', 'BUY', '2026-01-08'),
+(900007, 5000, 28.60, 'PETR4', 'PETR', 'MARIA', 'MESA2', '2026-01-06', '1', 'OMS1', 'BUY', '2026-01-06'),
+(900008, 1000, 45.70, 'ABEV3', 'ABEV', 'MARIA', 'MESA2', '2026-01-06', '1', 'OMS1', 'SELL', '2026-01-06'),
+(900009, 3000, 58.50, 'VALE3', 'VALE', 'MARIA', 'MESA2', '2026-01-08', '1', 'OMS1', 'BUY', '2026-01-08'),
+(900010, 2000, 11.30, 'MGLU3', 'MGLU', 'MARIA', 'MESA2', '2026-01-08', '1', 'OMS1', 'SELL', '2026-01-08'),
+(900011, 10, 126500.00, 'WINFEB26', 'WIN', 'CARLOS', 'MESA3', '2026-01-06', '1', 'OMS1', 'BUY', '2026-01-06'),
+(900012, 5, 126300.00, 'WINFEB26', 'WIN', 'CARLOS', 'MESA3', '2026-01-06', '1', 'OMS1', 'SELL', '2026-01-06'),
+(900013, 20, 126800.00, 'WINFEB26', 'WIN', 'CARLOS', 'MESA3', '2026-01-07', '1', 'OMS1', 'BUY', '2026-01-07'),
+(900014, 2, 5780.00, 'WDOFEB26', 'WDO', 'CARLOS', 'MESA3', '2026-01-07', '1', 'OMS1', 'SELL', '2026-01-07'),
+(900015, 4000, 28.70, 'PETR4', 'PETR', 'PEDRO', 'MESAXP', '2026-01-06', '3', 'OMS2', 'BUY', '2026-01-06'),
+(900016, 1500, 33.40, 'ITUB4', 'ITUB', 'PEDRO', 'MESAXP', '2026-01-06', '3', 'OMS2', 'SELL', '2026-01-06'),
+(900017, 2500, 58.90, 'VALE3', 'VALE', 'PEDRO', 'MESAXP', '2026-01-07', '3', 'OMS2', 'BUY', '2026-01-07'),
 (900018, 50, 126400.00, 'INDFEB26', 'IND', 'ANA', 'MESAXP', '2026-01-07', '3', 'OMS2', 'BUY', '2026-01-07'),
-(900019, 30, 5790.00,   'DOLFEB26', 'DOL', 'ANA', 'MESAXP', '2026-01-08', '3', 'OMS2', 'SELL', '2026-01-08');
+(900019, 30, 5790.00, 'DOLFEB26', 'DOL', 'ANA', 'MESAXP', '2026-01-08', '3', 'OMS2', 'SELL', '2026-01-08');
 
 -- ============================================
 -- DAILY BILLING - Broker 1 (BTG)

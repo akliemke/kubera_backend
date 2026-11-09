@@ -1,5 +1,6 @@
 using Dapper;
 using FinancialEngineCore.Infra;
+using System.Data;
 using System.Globalization;
 
 namespace KuberaWebApp.Controllers;
@@ -130,18 +131,10 @@ public static class SeedDataController
                         if (dayIdx % 7 == 0 && i == 0)
                             tif = "GTC";
 
-                        var orderId = await conn.QuerySingleAsync<long>(@"
-                            INSERT INTO history.orders
-                                (CumQty, AvgPx, Symbol, Asset, EnteringTrader, Entity,
-                                 TradeDate, EnteringFirm, OmsInstance, Side, businessDate, TimeInForce)
-                            VALUES
-                                (@Qty, @Price, @Symbol, @Asset, 'TRADER_A', 'MESA_TESTE',
-                                 @TradeDate, '935', 'OMS_TESTE', @Side, @BusinessDate, @TimeInForce)
-                            RETURNING Id",
-                            new { Qty = qty, Price = price, Symbol = symbol, Asset = symbol[..4],
-                                  TradeDate = day, BusinessDate = dateStr, Side = side,
-                                  TimeInForce = tif }, tx);
+                        var orderId = await InsertOrderAsync(conn, tx, qty, price, symbol, symbol[..4],
+                            "TRADER_A", side, day, dateStr, tif);
                         ordersCreated++;
+                        if (tif is null) tradesCreated++;
 
                         // Generate trades for GTC orders
                         if (tif == "GTC")
@@ -182,16 +175,9 @@ public static class SeedDataController
                         var price = Math.Round(basePrice * priceVar, 2);
                         var side = (dayIdx + i) % 2 == 0 ? "BUY" : "SELL";
 
-                        await conn.ExecuteAsync(@"
-                            INSERT INTO history.orders
-                                (CumQty, AvgPx, Symbol, Asset, EnteringTrader, Entity,
-                                 TradeDate, EnteringFirm, OmsInstance, Side, businessDate)
-                            VALUES
-                                (@Qty, @Price, @Symbol, @Asset, 'TRADER_B', 'MESA_TESTE',
-                                 @TradeDate, '935', 'OMS_TESTE', @Side, @BusinessDate)",
-                            new { Qty = qty, Price = price, Symbol = symbol, Asset = symbol[..4],
-                                  TradeDate = day, BusinessDate = dateStr, Side = side }, tx);
+                        await InsertOrderAsync(conn, tx, qty, price, symbol, symbol[..4], "TRADER_B", side, day, dateStr);
                         ordersCreated++;
+                        tradesCreated++;
                     }
 
                     // --- TRADER_C: 2-3 BMF orders per day ---
@@ -202,18 +188,10 @@ public static class SeedDataController
                         ? 126000m + dayIdx * 150m
                         : 5780m + dayIdx * 10m;
 
-                    await conn.ExecuteAsync(@"
-                        INSERT INTO history.orders
-                            (CumQty, AvgPx, Symbol, Asset, EnteringTrader,
-                             Entity, TradeDate, EnteringFirm, OmsInstance, Side, businessDate)
-                        VALUES
-                            (@Qty, @Price, @Symbol, @Asset, 'TRADER_C',
-                             'MESA_TESTE', @TradeDate, '935', 'OMS_TESTE', @Side, @BusinessDate)",
-                        new { Qty = miniQty, Price = miniPrice,
-                              Symbol = miniSym + monthSuffix, Asset = miniSym,
-                              TradeDate = day, BusinessDate = dateStr,
-                              Side = dayIdx % 2 == 0 ? "BUY" : "SELL" }, tx);
+                    await InsertOrderAsync(conn, tx, miniQty, miniPrice, miniSym + monthSuffix, miniSym,
+                        "TRADER_C", dayIdx % 2 == 0 ? "BUY" : "SELL", day, dateStr);
                     ordersCreated++;
+                    tradesCreated++;
 
                     // Cheio contract (IND or DOL)
                     var cheioSym = dayIdx % 3 == 0 ? "IND" : "DOL";
@@ -222,18 +200,10 @@ public static class SeedDataController
                         ? 126000m + dayIdx * 200m
                         : 5780m + dayIdx * 15m;
 
-                    await conn.ExecuteAsync(@"
-                        INSERT INTO history.orders
-                            (CumQty, AvgPx, Symbol, Asset, EnteringTrader,
-                             Entity, TradeDate, EnteringFirm, OmsInstance, Side, businessDate)
-                        VALUES
-                            (@Qty, @Price, @Symbol, @Asset, 'TRADER_C',
-                             'MESA_TESTE', @TradeDate, '935', 'OMS_TESTE', @Side, @BusinessDate)",
-                        new { Qty = cheioQty, Price = cheioPrice,
-                              Symbol = cheioSym + monthSuffix, Asset = cheioSym,
-                              TradeDate = day, BusinessDate = dateStr,
-                              Side = dayIdx % 2 == 0 ? "SELL" : "BUY" }, tx);
+                    await InsertOrderAsync(conn, tx, cheioQty, cheioPrice, cheioSym + monthSuffix, cheioSym,
+                        "TRADER_C", dayIdx % 2 == 0 ? "SELL" : "BUY", day, dateStr);
                     ordersCreated++;
+                    tradesCreated++;
 
                     // DI1 contract (every other day)
                     if (dayIdx % 2 == 0)
@@ -244,16 +214,9 @@ public static class SeedDataController
                         var di1Symbol = $"DI1{DI1MonthCodes[maturityMonth]}{maturityYear % 100}";
                         var di1Qty = 10 + (dayIdx % 8) * 5;
 
-                        await conn.ExecuteAsync(@"
-                            INSERT INTO history.orders
-                                (CumQty, AvgPx, Symbol, Asset, EnteringTrader,
-                                 Entity, TradeDate, EnteringFirm, OmsInstance, Side, businessDate)
-                            VALUES
-                                (@Qty, 0, @Symbol, @Asset, 'TRADER_C',
-                                 'MESA_TESTE', @TradeDate, '935', 'OMS_TESTE', 'BUY', @BusinessDate)",
-                            new { Qty = di1Qty, Symbol = di1Symbol, Asset = "DI1",
-                                  TradeDate = day, BusinessDate = dateStr }, tx);
+                        await InsertOrderAsync(conn, tx, di1Qty, 0, di1Symbol, "DI1", "TRADER_C", "BUY", day, dateStr);
                         ordersCreated++;
+                        tradesCreated++;
                     }
 
                     // Sintético de dólar (DOL + WDO) a cada 3 dias: só a ordem do sintético chega;
@@ -264,10 +227,10 @@ public static class SeedDataController
                         var synthPrice = 5780m + dayIdx * 12m;
                         var synthOrderId = await conn.QuerySingleAsync<long>(@"
                             INSERT INTO history.orders
-                                (CumQty, AvgPx, Symbol, Asset, EnteringTrader,
+                                (CumQty, AvgPx, Symbol, EnteringTrader,
                                  Entity, TradeDate, EnteringFirm, OmsInstance, Side, businessDate)
                             VALUES
-                                (3, @Price, @Symbol, 'DOL', 'TRADER_C',
+                                (3, @Price, @Symbol, 'TRADER_C',
                                  'MESA_TESTE', @TradeDate, '935', 'OMS_TESTE', 'BUY', @BusinessDate)
                             RETURNING Id",
                             new { Price = synthPrice, Symbol = synthSymbol, TradeDate = day, BusinessDate = dateStr }, tx);
@@ -325,6 +288,41 @@ public static class SeedDataController
         .WithDescription("Gera dados ficticios (orders + trades) para a corretora 935 em um mes especifico");
 
         return group;
+    }
+
+    /// <summary>
+    /// history.orders não tem Asset (só os trades têm): ordem não-GTC ganha um trade de execução
+    /// (CumQty @ AvgPx) com a raiz. GTC/GTD gera os trades à parte.
+    /// </summary>
+    private static async Task<long> InsertOrderAsync(IDbConnection conn, IDbTransaction tx,
+        decimal qty, decimal price, string symbol, string asset, string trader, string side,
+        DateOnly day, string businessDate, string? timeInForce = null)
+    {
+        var orderId = await conn.QuerySingleAsync<long>(@"
+            INSERT INTO history.orders
+                (CumQty, AvgPx, Symbol, EnteringTrader, Entity,
+                 TradeDate, EnteringFirm, OmsInstance, Side, businessDate, TimeInForce)
+            VALUES
+                (@Qty, @Price, @Symbol, @Trader, 'MESA_TESTE',
+                 @TradeDate, '935', 'OMS_TESTE', @Side, @BusinessDate, @TimeInForce)
+            RETURNING Id",
+            new { Qty = qty, Price = price, Symbol = symbol, Trader = trader, Side = side,
+                  TradeDate = day, BusinessDate = businessDate, TimeInForce = timeInForce }, tx);
+
+        if (timeInForce is null)
+        {
+            await conn.ExecuteAsync(@"
+                INSERT INTO history.trades
+                    (OrderId, LastQty, LastPx, Symbol, Asset, EnteringTrader,
+                     Entity, TradeDate, EnteringFirm, OmsInstance, Side, businessDate)
+                VALUES
+                    (@OrderId, @Qty, @Price, @Symbol, @Asset, @Trader,
+                     'MESA_TESTE', @TradeDate, '935', 'OMS_TESTE', @Side, @BusinessDate)",
+                new { OrderId = orderId, Qty = qty, Price = price, Symbol = symbol, Asset = asset,
+                      Trader = trader, Side = side, TradeDate = day, BusinessDate = businessDate }, tx);
+        }
+
+        return orderId;
     }
 
     private static List<DateOnly> GetTradingDays(int year, int month)

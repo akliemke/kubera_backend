@@ -19,6 +19,7 @@ public class Order
 
     /// <summary>
     /// Raiz do ativo (ex: PETR, WIN, DI1). Identifica a classe e o tipo de contrato BMF.
+    /// Não existe em history.orders: a view traz do trade da ordem (null se a ordem não tem trade).
     /// Em sintético a view devolve uma linha por perna com Asset = perna (ex: WDO, DOL).
     /// </summary>
     public string? Asset { get; set; }

@@ -544,7 +544,8 @@ public class BillingIntegrationTests : IAsyncLifetime
     }
 
     // ==========================================
-    // AssetClass is derived from Asset (root); unrecognized roots are not billed
+    // AssetClass is derived from the trades' Asset (root); orders without trades fall back to the Symbol;
+    // unrecognized roots are not billed
     // ==========================================
     [Fact]
     public async Task AssetClass_DeduzidaPelaRaiz_RaizDesconhecidaNaoCobrada()
@@ -556,11 +557,12 @@ public class BillingIntegrationTests : IAsyncLifetime
         await SeedOrder(1, 100_000, 100, "TRADER1", "B3SA3", "B3SA"); // EQUITY (issuer root with digit)
         await SeedOrder(2, 100, 0, "TRADER1", "BGIV24", "BGI");        // BMF, other contract: 100 * 0.07
         await SeedOrder(3, 100, 10, "TRADER1", "XX1", "X");            // unrecognized root
+        await SeedOrder(4, 100, 0, "TRADER1", "WINZ24", null);         // no trades: root from Symbol, mini 100 * 0.03
 
         await CreateService().ProcessBrokerAsync(BrokerId, _tradeDate, ProcessBillingId, CancellationToken.None);
 
         Assert.Equal(500m, (await GetDailyBilling("TRADER1", "EQUITY"))!.TotalFee);
-        Assert.Equal(7m, (await GetDailyBilling("TRADER1", "BMF"))!.TotalFee);
+        Assert.Equal(10m, (await GetDailyBilling("TRADER1", "BMF"))!.TotalFee);
 
         await using var conn = new NpgsqlConnection(_db.ConnectionString);
         await conn.OpenAsync();
@@ -577,8 +579,8 @@ public class BillingIntegrationTests : IAsyncLifetime
         await SeedBroker();
         await SeedDefaultBmfConfig();
 
-        // Only the synthetic order arrives (Asset DOL); legs come from the UniqueTradeId suffix
-        await SeedOrder(1, 4, 5800, "TRADER1", "BTGDOLZ24", "DOL");
+        // Only the synthetic order arrives; its trades carry Asset DOL and the leg in the UniqueTradeId suffix
+        await SeedOrder(1, 4, 5800, "TRADER1", "BTGDOLZ24", asset: null);
         await SeedTrade(orderId: 1, lastQty: 0.2m, lastPx: 5800, "TRADER1", "BTGDOLZ24", "DOL", uniqueTradeId: "1001-WDO");
         await SeedTrade(orderId: 1, lastQty: 1.8m, lastPx: 5800, "TRADER1", "BTGDOLZ24", "DOL", uniqueTradeId: "1002-WDO");
         await SeedTrade(orderId: 1, lastQty: 2m, lastPx: 5800, "TRADER1", "BTGDOLZ24", "DOL", uniqueTradeId: "1003-DOL");
@@ -847,17 +849,22 @@ public class BillingIntegrationTests : IAsyncLifetime
             new { Broker = BrokerId });
     }
 
+    /// <summary>
+    /// history.orders has no Asset (only trades do). For non-GTC orders with an asset, also seeds one
+    /// execution trade (CumQty @ AvgPx) carrying it; asset null = order without trades (or trades seeded apart).
+    /// GTC/GTD orders take their trades (and Asset) from explicit SeedTrade calls.
+    /// </summary>
     private async Task SeedOrder(long id, decimal qty, decimal price, string trader, string symbol,
-        string asset, string entity = "MESA1", string? timeInForce = null, DateOnly? tradeDate = null)
+        string? asset, string entity = "MESA1", string? timeInForce = null, DateOnly? tradeDate = null)
     {
         var date = tradeDate ?? _tradeDate;
         await using var conn = new NpgsqlConnection(_db.ConnectionString);
         await conn.OpenAsync();
         await conn.ExecuteAsync(@"
             INSERT INTO history.orders
-                (Id, CumQty, AvgPx, Symbol, Asset, EnteringTrader,
+                (Id, CumQty, AvgPx, Symbol, EnteringTrader,
                  Entity, TradeDate, EnteringFirm, OmsInstance, Side, businessDate, TimeInForce)
-            VALUES (@Id, @CumQty, @AvgPx, @Symbol, @Asset, @EnteringTrader,
+            VALUES (@Id, @CumQty, @AvgPx, @Symbol, @EnteringTrader,
                     @Entity, @TradeDate, @EnteringFirm, 'OMS1', 'BUY', @BusinessDate, @TimeInForce)",
             new
             {
@@ -865,7 +872,6 @@ public class BillingIntegrationTests : IAsyncLifetime
                 CumQty = qty,
                 AvgPx = price,
                 Symbol = symbol,
-                Asset = asset,
                 EnteringTrader = trader,
                 Entity = entity,
                 TradeDate = date,
@@ -873,6 +879,9 @@ public class BillingIntegrationTests : IAsyncLifetime
                 BusinessDate = date.ToString("yyyy-MM-dd"),
                 TimeInForce = timeInForce
             });
+
+        if (asset is not null && timeInForce is null)
+            await SeedTrade(id, qty, price, trader, symbol, asset, entity, tradeDate: date);
     }
 
     private async Task SeedPreviousDailyBilling(string trader, string assetClass,
@@ -941,8 +950,9 @@ public class BillingIntegrationTests : IAsyncLifetime
     }
 
     private async Task SeedTrade(long orderId, decimal lastQty, decimal lastPx, string trader,
-        string symbol, string asset, string entity = "MESA1", string? uniqueTradeId = null)
+        string symbol, string asset, string entity = "MESA1", string? uniqueTradeId = null, DateOnly? tradeDate = null)
     {
+        var date = tradeDate ?? _tradeDate;
         await using var conn = new NpgsqlConnection(_db.ConnectionString);
         await conn.OpenAsync();
         await conn.ExecuteAsync(@"
@@ -961,9 +971,9 @@ public class BillingIntegrationTests : IAsyncLifetime
                 Asset = asset,
                 EnteringTrader = trader,
                 Entity = entity,
-                TradeDate = _tradeDate,
+                TradeDate = date,
                 EnteringFirm = BrokerId.ToString(),
-                BusinessDate = _tradeDate.ToString("yyyy-MM-dd")
+                BusinessDate = date.ToString("yyyy-MM-dd")
             });
     }
 
