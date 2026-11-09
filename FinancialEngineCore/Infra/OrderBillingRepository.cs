@@ -29,7 +29,7 @@ public class OrderBillingRepository
 
         const string copy = @"
             COPY financial_engine.order_billing
-                (OrderId, DailyBillingId, Broker, Trader, KeyType, TradeDate,
+                (OrderId, Asset, DailyBillingId, Broker, Trader, KeyType, TradeDate,
                  AssetClass, Notional, Qty, FeeAmount)
             FROM STDIN (FORMAT BINARY)";
 
@@ -38,6 +38,10 @@ public class OrderBillingRepository
         {
             await writer.StartRowAsync(cancellationToken);
             await writer.WriteAsync(ob.OrderId, NpgsqlDbType.Bigint, cancellationToken);
+            if (ob.Asset is null)
+                await writer.WriteNullAsync(cancellationToken);
+            else
+                await writer.WriteAsync(ob.Asset, NpgsqlDbType.Varchar, cancellationToken);
             await writer.WriteAsync(ob.DailyBillingId, NpgsqlDbType.Bigint, cancellationToken);
             await writer.WriteAsync(ob.Broker, NpgsqlDbType.Integer, cancellationToken);
             await writer.WriteAsync(ob.Trader, NpgsqlDbType.Varchar, cancellationToken);
@@ -95,14 +99,14 @@ public class OrderBillingRepository
 
         const string sql = @"
             SELECT ob.OrderId, ob.Broker, ob.Trader, ob.KeyType, ob.TradeDate, ob.AssetClass,
-                   ob.Notional, ob.Qty, ob.FeeAmount,
+                   ob.Notional, ob.Qty, ob.FeeAmount, ob.Asset,
                    o.Symbol, o.Side
             FROM financial_engine.order_billing ob
-            LEFT JOIN history.vw_billable_orders o ON o.Id = ob.OrderId
-                AND o.businessDate = to_char(ob.TradeDate, 'YYYY-MM-DD')
+            -- history.orders (1 linha por ordem), não a view: a view devolve 1 linha por perna do sintético
+            LEFT JOIN history.orders o ON o.Id = ob.OrderId
             WHERE ob.Broker = @BrokerId
               AND ob.TradeDate >= @MonthStart AND ob.TradeDate < @MonthEnd
-            ORDER BY ob.Trader, ob.KeyType, ob.AssetClass, ob.TradeDate, ob.OrderId";
+            ORDER BY ob.Trader, ob.KeyType, ob.AssetClass, ob.TradeDate, ob.OrderId, ob.Asset";
 
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
         var result = await conn.QueryAsync<OrderBillingDetail>(sql, new

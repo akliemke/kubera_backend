@@ -47,6 +47,9 @@ public class BillingCalculationResult
 public class OrderFeeResult
 {
     public long OrderId { get; init; }
+
+    /// <summary>Raiz do ativo da ordem (no sintético, a perna: WDO/DOL)</summary>
+    public string? Asset { get; init; }
     public decimal Notional { get; init; }
     public decimal Qty { get; init; }
     public decimal FeeAmount { get; init; }

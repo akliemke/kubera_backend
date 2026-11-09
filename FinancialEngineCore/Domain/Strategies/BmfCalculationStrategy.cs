@@ -5,7 +5,8 @@ namespace FinancialEngineCore.Domain.Strategies;
 
 /// <summary>
 /// Calculation strategy for BMF assets (futures contracts).
-/// Uses per-contract fees with a single monthly CAP.
+/// Uses per-contract fees with a single monthly CAP: DI1 by maturity, mini/cheio by contract,
+/// every other BMF asset at a fixed fee per contract (ValorOutros).
 /// </summary>
 public class BmfCalculationStrategy : ICalculationStrategy
 {
@@ -14,7 +15,7 @@ public class BmfCalculationStrategy : ICalculationStrategy
 
     private readonly ILogger<BmfCalculationStrategy> _logger;
 
-    public string AssetClass => "BMF";
+    public string AssetClass => AssetClasses.Bmf;
 
     public BmfCalculationStrategy(ILogger<BmfCalculationStrategy> logger)
     {
@@ -51,7 +52,7 @@ public class BmfCalculationStrategy : ICalculationStrategy
         if (result.UnknownSymbols.Count > 0)
         {
             _logger.LogWarning(
-                "Unclassified BMF contracts charged as zero for broker {BrokerId}, billing key {BillingKey} on {Date}: {Symbols}",
+                "BMF orders without contract root charged as zero for broker {BrokerId}, billing key {BillingKey} on {Date}: {Symbols}",
                 brokerId, billingKey, tradeDate, string.Join(", ", result.UnknownSymbols));
         }
 
@@ -86,11 +87,11 @@ public class BmfCalculationStrategy : ICalculationStrategy
             var qty = order.CumQty;
             totalQty += qty;
 
-            var contractType = ClassifyContract(order.ExchangeSymbol);
+            var contractType = ClassifyContract(GetContractRoot(order));
             if (contractType == ContractType.Unknown)
-                unknownSymbols.Add(order.ExchangeSymbol ?? order.Symbol);
+                unknownSymbols.Add(order.Symbol);
 
-            var feePerContract = GetFeePerContract(contractType, order.ExchangeSymbol, config, tradeDate);
+            var feePerContract = GetFeePerContract(contractType, order.Symbol, config, tradeDate);
             calculatedFee += qty * feePerContract;
         }
 
@@ -108,7 +109,7 @@ public class BmfCalculationStrategy : ICalculationStrategy
             KeyType = key.Type,
             Broker = broker,
             TradeDate = tradeDate,
-            AssetClass = "BMF",
+            AssetClass = AssetClasses.Bmf,
             TotalNotional = 0,
             TotalQty = totalQty,
             TotalFee = totalFee,
@@ -121,40 +122,36 @@ public class BmfCalculationStrategy : ICalculationStrategy
     }
 
     /// <summary>
-    /// Classifica o tipo de contrato baseado no ExchangeSymbol.
+    /// Raiz do contrato: o Asset (WIN, WDO, DI1; perna do sintético) ou, sem Asset, o prefixo do Symbol.
+    /// Ex: "WINZ25" -> "WIN", "DI1F25" -> "DI1". Formato BMF: RAIZ(3) + MÊS(1) + ANO(2)
     /// </summary>
-    private static ContractType ClassifyContract(string? exchangeSymbol)
+    private static string GetContractRoot(Order order)
     {
-        if (string.IsNullOrEmpty(exchangeSymbol))
-            return ContractType.Unknown;
+        if (!string.IsNullOrWhiteSpace(order.Asset))
+            return order.Asset.Trim().ToUpperInvariant();
 
-        // Extrair prefixo do símbolo (ex: WIN, WDO, IND, DOL, DI1)
-        var prefix = ExtractSymbolPrefix(exchangeSymbol);
-
-        if (MiniSymbols.Contains(prefix))
-            return ContractType.Mini;
-
-        if (CheioSymbols.Contains(prefix))
-            return ContractType.Cheio;
-
-        if (prefix.Equals("DI1", StringComparison.OrdinalIgnoreCase))
-            return ContractType.DI1;
-
-        return ContractType.Unknown;
+        var symbol = order.Symbol.Trim();
+        return (symbol.Length < 3 ? symbol : symbol[..3]).ToUpperInvariant();
     }
 
     /// <summary>
-    /// Extrai o prefixo do símbolo.
-    /// Ex: "WINZ25" -> "WIN", "DI1F25" -> "DI1", "WDOZ24" -> "WDO"
-    /// Formato BMF: PREFIXO(3) + MÊS(1) + ANO(2)
+    /// Classifica o tipo de contrato pela raiz. Raiz que não é mini, cheio nem DI1 = demais contratos.
     /// </summary>
-    private static string ExtractSymbolPrefix(string symbol)
+    private static ContractType ClassifyContract(string root)
     {
-        if (symbol.Length < 3)
-            return symbol.ToUpperInvariant();
+        if (string.IsNullOrEmpty(root))
+            return ContractType.Unknown;
 
-        // Símbolos BMF têm 3 caracteres de prefixo: WIN, WDO, IND, DOL, DI1
-        return symbol.Substring(0, 3).ToUpperInvariant();
+        if (MiniSymbols.Contains(root))
+            return ContractType.Mini;
+
+        if (CheioSymbols.Contains(root))
+            return ContractType.Cheio;
+
+        if (root.Equals("DI1", StringComparison.OrdinalIgnoreCase))
+            return ContractType.DI1;
+
+        return ContractType.Other;
     }
 
     /// <summary>
@@ -162,7 +159,7 @@ public class BmfCalculationStrategy : ICalculationStrategy
     /// </summary>
     private static decimal GetFeePerContract(
         ContractType type,
-        string? exchangeSymbol,
+        string symbol,
         BmfFeeConfig config,
         DateOnly tradeDate)
     {
@@ -170,23 +167,24 @@ public class BmfCalculationStrategy : ICalculationStrategy
         {
             ContractType.Mini => config.ValorMini,
             ContractType.Cheio => config.ValorCheio,
-            ContractType.DI1 => GetDI1FeeByMaturity(exchangeSymbol, config, tradeDate),
+            ContractType.DI1 => GetDI1FeeByMaturity(symbol, config, tradeDate),
+            ContractType.Other => config.ValorOutros,
             _ => 0
         };
     }
 
     /// <summary>
-    /// Calcula o fee do DI1 baseado no vencimento.
+    /// Calcula o fee do DI1 baseado no vencimento (lido do Symbol, ex: DI1F27).
     /// </summary>
     private static decimal GetDI1FeeByMaturity(
-        string? exchangeSymbol,
+        string symbol,
         BmfFeeConfig config,
         DateOnly tradeDate)
     {
-        if (string.IsNullOrEmpty(exchangeSymbol))
+        if (string.IsNullOrEmpty(symbol))
             return config.DI1Venc1a4;
 
-        var maturityNumber = CalculateMaturityNumber(exchangeSymbol, tradeDate);
+        var maturityNumber = CalculateMaturityNumber(symbol, tradeDate);
 
         return maturityNumber switch
         {
@@ -202,14 +200,14 @@ public class BmfCalculationStrategy : ICalculationStrategy
     /// Calcula o número do vencimento baseado no símbolo e data da operação.
     /// Ex: DI1F25 operado em Nov/24 = 2º vencimento (Jan/25 é 2 meses à frente)
     /// </summary>
-    private static int CalculateMaturityNumber(string exchangeSymbol, DateOnly tradeDate)
+    private static int CalculateMaturityNumber(string symbol, DateOnly tradeDate)
     {
         // Formato: DI1 + letra do mês + ano (ex: DI1F25)
-        if (exchangeSymbol.Length < 5)
+        if (symbol.Length < 5)
             return 1;
 
-        var monthCode = exchangeSymbol[3];
-        var yearStr = exchangeSymbol.Substring(4);
+        var monthCode = symbol[3];
+        var yearStr = symbol.Substring(4);
 
         if (!int.TryParse(yearStr, out var year))
             return 1;
@@ -265,6 +263,7 @@ public class BmfCalculationStrategy : ICalculationStrategy
         return orders.Select((o, i) => new OrderFeeResult
         {
             OrderId = o.Id,
+            Asset = o.Asset,
             Notional = 0,
             Qty = o.CumQty,
             FeeAmount = fees[i]
@@ -294,6 +293,7 @@ public class BmfCalculationStrategy : ICalculationStrategy
             OrderFees = orders.Select(o => new OrderFeeResult
             {
                 OrderId = o.Id,
+                Asset = o.Asset,
                 Notional = 0,
                 Qty = o.CumQty,
                 FeeAmount = 0
@@ -306,6 +306,7 @@ public class BmfCalculationStrategy : ICalculationStrategy
         Unknown,
         Mini,
         Cheio,
-        DI1
+        DI1,
+        Other
     }
 }

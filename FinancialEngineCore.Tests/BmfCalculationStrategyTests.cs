@@ -16,6 +16,7 @@ public class BmfCalculationStrategyTests
             ValidTo = new DateOnly(2099, 12, 31),
             ValorMini = 0.03m,
             ValorCheio = 0.15m,
+            ValorOutros = 0.07m,
             DI1Venc1a4 = 0.01m,
             DI1Venc5 = 0.02m,
             DI1Venc6 = 0.04m,
@@ -26,16 +27,17 @@ public class BmfCalculationStrategyTests
         };
     }
 
-    private static Order CreateBmfOrder(string exchangeSymbol, decimal qty, string trader = "TRADER1")
+    /// <summary>Asset padrão = raiz do Symbol (3 primeiros caracteres)</summary>
+    private static Order CreateBmfOrder(string symbol, decimal qty, string trader = "TRADER1", string? asset = null)
     {
         return new Order
         {
             Id = 1,
             CumQty = qty,
             AvgPx = 0, // Not used for BMF
-            Symbol = exchangeSymbol,
-            ExchangeSymbol = exchangeSymbol,
-            AssetClass = "BMF",
+            Symbol = symbol,
+            Asset = asset ?? (symbol.Length >= 3 ? symbol[..3] : symbol),
+            AssetClass = AssetClasses.Bmf,
             EnteringTrader = trader,
             EnteringFirm = "1",
             Entity = "MESA1",
@@ -333,18 +335,62 @@ public class BmfCalculationStrategyTests
     }
 
     [Fact]
-    public void Calculate_UnknownContract_ZeroFeeAndReported()
+    public void Calculate_OtherBmfContracts_FixedFeePerContract()
+    {
+        // Not mini, cheio nor DI1: ValorOutros (0.07) per contract
+        var orders = new List<Order>
+        {
+            CreateBmfOrder("WINZ24", 100), // 3.00
+            CreateBmfOrder("BGIV25", 50),  // 3.50
+            CreateBmfOrder("CCMK26", 10)   // 0.70
+        };
+
+        var result = BmfCalculationStrategy.Calculate(orders, CreateDefaultConfig(), 0, orders[0].TradeDate);
+
+        Assert.Equal(7.20m, result.TotalFee);
+        Assert.Empty(result.UnknownSymbols);
+    }
+
+    [Fact]
+    public void Calculate_ContractTypeComesFromAsset_NotSymbol()
+    {
+        // Synthetic legs: the view returns Asset = leg (WDO mini / DOL cheio) with the synthetic Symbol
+        var orders = new List<Order>
+        {
+            CreateBmfOrder("BTGDOLZ24", 10, asset: "WDO"), // 10 * 0.03 = 0.30
+            CreateBmfOrder("BTGDOLZ24", 2, asset: "DOL")   //  2 * 0.15 = 0.30
+        };
+
+        var result = BmfCalculationStrategy.Calculate(orders, CreateDefaultConfig(), 0, orders[0].TradeDate);
+
+        Assert.Equal(0.60m, result.TotalFee);
+        Assert.Equal(12m, result.TotalQty);
+    }
+
+    [Fact]
+    public void Calculate_WithoutAsset_UsesSymbolRoot()
+    {
+        var order = CreateBmfOrder("WINZ24", 100);
+        order.Asset = null;
+
+        var result = BmfCalculationStrategy.Calculate([order], CreateDefaultConfig(), 0, order.TradeDate);
+
+        Assert.Equal(3.00m, result.TotalFee);
+    }
+
+    [Fact]
+    public void Calculate_WithoutContractRoot_ZeroFeeAndReported()
     {
         var orders = new List<Order>
         {
             CreateBmfOrder("WINZ24", 100),
-            CreateBmfOrder("BITZ24", 50)
+            CreateBmfOrder("", 50, asset: "")
         };
 
         var result = BmfCalculationStrategy.Calculate(orders, CreateDefaultConfig(), 0, orders[0].TradeDate);
 
         Assert.Equal(3.00m, result.TotalFee); // only WIN: 100 * 0.03
-        Assert.Equal(new[] { "BITZ24" }, result.UnknownSymbols);
+        Assert.Single(result.UnknownSymbols);
     }
 
     [Fact]

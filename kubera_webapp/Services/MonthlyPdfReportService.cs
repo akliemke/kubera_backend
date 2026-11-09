@@ -303,7 +303,7 @@ public class MonthlyPdfReportService
                                 table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(2)
                                     .Text(order.OrderId.ToString()).FontSize(8);
                                 table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(2)
-                                    .Text(order.Symbol ?? "-").FontSize(8);
+                                    .Text(SymbolLabel(order)).FontSize(8);
                                 table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(2)
                                     .Text(order.Side ?? "-").FontSize(8);
                                 table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(2)
@@ -342,4 +342,16 @@ public class MonthlyPdfReportService
     /// <summary>Entity e trader podem ter o mesmo nome: marca as chaves de entity.</summary>
     private static string BillingKeyLabel(string key, string keyType)
         => keyType == BillingKeyTypes.Entity ? $"{key} (Entidade)" : key;
+
+    /// <summary>Sintético gera uma linha por perna: mostra a perna quando o Symbol não começa com o Asset (BTGDOLZ26 (WDO)).</summary>
+    private static string SymbolLabel(OrderBillingDetail order)
+    {
+        if (string.IsNullOrEmpty(order.Symbol))
+            return "-";
+
+        return !string.IsNullOrEmpty(order.Asset)
+               && !order.Symbol.StartsWith(order.Asset, StringComparison.OrdinalIgnoreCase)
+            ? $"{order.Symbol} ({order.Asset})"
+            : order.Symbol;
+    }
 }

@@ -14,20 +14,20 @@ public class Order
     /// <summary>Preço médio de execução</summary>
     public decimal AvgPx { get; set; }
 
-    /// <summary>Símbolo do ativo (ex: PETR4, VALE3)</summary>
+    /// <summary>Símbolo do ativo (ex: PETR4, WINZ25, DI1F27, BTGDOLZ26). DI1 usa o vencimento do Symbol.</summary>
     public required string Symbol { get; set; }
 
     /// <summary>
-    /// Símbolo de exchange para BMF (ex: WIN, WDO, IND, DOL, DI1F25).
-    /// Usado para identificar tipo de contrato e vencimento.
+    /// Raiz do ativo (ex: PETR, WIN, DI1). Identifica a classe e o tipo de contrato BMF.
+    /// Em sintético a view devolve uma linha por perna com Asset = perna (ex: WDO, DOL).
     /// </summary>
-    public string? ExchangeSymbol { get; set; }
+    public string? Asset { get; set; }
 
     /// <summary>
-    /// Classe do ativo: "EQUITY" ou "BMF".
-    /// Determina qual lógica de cobrança aplicar.
+    /// Classe do ativo: "EQUITY", "BMF" ou "UNKNOWN". Não vem do banco:
+    /// preenchida por <c>AssetClassifier</c> na leitura das ordens.
     /// </summary>
-    public required string AssetClass { get; set; }
+    public string AssetClass { get; set; } = AssetClasses.Unknown;
 
     /// <summary>Código do trader que executou a ordem</summary>
     public required string EnteringTrader { get; set; }

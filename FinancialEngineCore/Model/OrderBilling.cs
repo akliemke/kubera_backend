@@ -11,6 +11,9 @@ public class OrderBilling
     /// <summary>ID da ordem original</summary>
     public long OrderId { get; set; }
 
+    /// <summary>Raiz do ativo. Sintético gera uma linha por perna (mesmo OrderId, Asset WDO/DOL)</summary>
+    public string? Asset { get; set; }
+
     /// <summary>Vínculo com o cálculo diário agregado</summary>
     public long DailyBillingId { get; set; }
 

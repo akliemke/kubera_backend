@@ -29,6 +29,9 @@ public class BmfFeeConfig
     /// <summary>Valor por contrato Cheio (IND, DOL)</summary>
     public decimal ValorCheio { get; set; }
 
+    /// <summary>Valor por contrato dos demais ativos BMF (outros futuros, opções sobre futuro, rolagens)</summary>
+    public decimal ValorOutros { get; set; }
+
     /// <summary>Valor DI1 para 1º ao 4º vencimento</summary>
     [JsonPropertyName("di1Venc1a4")]
     public decimal DI1Venc1a4 { get; set; }

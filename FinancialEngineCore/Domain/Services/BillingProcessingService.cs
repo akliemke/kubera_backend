@@ -189,8 +189,9 @@ public class BillingProcessingService : IBillingProcessingService
             if (strategy == null)
             {
                 _logger.LogWarning(
-                    "No calculation strategy found for AssetClass {AssetClass}, billing key {BillingKey}",
-                    assetClass, billingKey);
+                    "No calculation strategy found for AssetClass {AssetClass}, billing key {BillingKey}; orders not billed: {Symbols}",
+                    assetClass, billingKey,
+                    string.Join(", ", orders.Select(o => $"{o.Symbol} ({o.Asset})").Distinct()));
                 continue;
             }
 
@@ -250,8 +251,8 @@ public class BillingProcessingService : IBillingProcessingService
                 TotalFee = result.TotalFee,
                 AccumulatedBefore = result.AccumulatedBefore,
                 AccumulatedAfter = result.AccumulatedAfter,
-                EquityConfigId = result.AssetClass == "EQUITY" ? result.ConfigId : null,
-                BmfConfigId = result.AssetClass == "BMF" ? result.ConfigId : null,
+                EquityConfigId = result.AssetClass == AssetClasses.Equity ? result.ConfigId : null,
+                BmfConfigId = result.AssetClass == AssetClasses.Bmf ? result.ConfigId : null,
                 ProcessBillingId = processBillingId,
                 CalculatedAt = calculatedAt
             });
@@ -259,6 +260,7 @@ public class BillingProcessingService : IBillingProcessingService
             orderBillings.AddRange(result.OrderFees.Select(of => new OrderBilling
             {
                 OrderId = of.OrderId,
+                Asset = of.Asset,
                 DailyBillingId = dailyBillingId,
                 Broker = result.Broker,
                 Trader = result.Trader,

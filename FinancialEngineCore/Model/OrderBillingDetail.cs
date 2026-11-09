@@ -16,5 +16,7 @@ public class OrderBillingDetail
     public decimal Qty { get; set; }
     public decimal FeeAmount { get; set; }
     public string? Symbol { get; set; }
+    /// <summary>Raiz do ativo / perna do sintético (ex: WDO em BTGDOLZ26)</summary>
+    public string? Asset { get; set; }
     public string? Side { get; set; }
 }

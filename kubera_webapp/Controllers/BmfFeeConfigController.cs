@@ -48,6 +48,7 @@ public static class BmfFeeConfigController
                 c.ValidTo,
                 Mini = c.ValorMini,
                 Cheio = c.ValorCheio,
+                Outros = c.ValorOutros,
                 Di1 = new
                 {
                     Venc1a4 = c.DI1Venc1a4,
@@ -94,6 +95,7 @@ public static class BmfFeeConfigController
                 ValidTo = request.ValidTo,
                 ValorMini = request.ValorMini,
                 ValorCheio = request.ValorCheio,
+                ValorOutros = request.ValorOutros,
                 DI1Venc1a4 = request.DI1Venc1a4,
                 DI1Venc5 = request.DI1Venc5,
                 DI1Venc6 = request.DI1Venc6,
@@ -136,6 +138,7 @@ public static class BmfFeeConfigController
                 ValidTo = defaultConfig.ValidTo,
                 ValorMini = defaultConfig.ValorMini,
                 ValorCheio = defaultConfig.ValorCheio,
+                ValorOutros = defaultConfig.ValorOutros,
                 DI1Venc1a4 = defaultConfig.DI1Venc1a4,
                 DI1Venc5 = defaultConfig.DI1Venc5,
                 DI1Venc6 = defaultConfig.DI1Venc6,
@@ -196,6 +199,7 @@ public static class BmfFeeConfigController
             existing.ValidTo = request.ValidTo;
             existing.ValorMini = request.ValorMini;
             existing.ValorCheio = request.ValorCheio;
+            existing.ValorOutros = request.ValorOutros;
             existing.DI1Venc1a4 = request.DI1Venc1a4;
             existing.DI1Venc5 = request.DI1Venc5;
             existing.DI1Venc6 = request.DI1Venc6;
@@ -240,6 +244,8 @@ public static class BmfFeeConfigController
             errors.Add("ValorMini deve ser maior ou igual a zero");
         if (request.ValorCheio < 0)
             errors.Add("ValorCheio deve ser maior ou igual a zero");
+        if (request.ValorOutros < 0)
+            errors.Add("ValorOutros deve ser maior ou igual a zero");
         if (request.DI1Venc1a4 < 0)
             errors.Add("DI1Venc1a4 deve ser maior ou igual a zero");
         if (request.DI1Venc5 < 0)
@@ -264,6 +270,8 @@ public static class BmfFeeConfigController
             errors.Add("ValorMini deve ser maior ou igual a zero");
         if (request.ValorCheio < 0)
             errors.Add("ValorCheio deve ser maior ou igual a zero");
+        if (request.ValorOutros < 0)
+            errors.Add("ValorOutros deve ser maior ou igual a zero");
         if (request.DI1Venc1a4 < 0)
             errors.Add("DI1Venc1a4 deve ser maior ou igual a zero");
         if (request.DI1Venc5 < 0)
@@ -293,7 +301,8 @@ public record CreateBmfFeeConfigRequest(
     decimal DI1Venc7,
     decimal DI1Venc8Plus,
     decimal? CapMensal, // NULL = sem teto
-    string? KeyType = null // TRADER | ENTITY, obrigatório quando Trader é informado
+    string? KeyType = null, // TRADER | ENTITY, obrigatório quando Trader é informado
+    decimal ValorOutros = 0 // demais ativos BMF, fixo por contrato
 );
 
 public record UpdateBmfFeeConfigRequest(
@@ -308,7 +317,8 @@ public record UpdateBmfFeeConfigRequest(
     decimal DI1Venc7,
     decimal DI1Venc8Plus,
     decimal? CapMensal, // NULL = sem teto
-    string? KeyType = null // TRADER | ENTITY, obrigatório quando Trader é informado
+    string? KeyType = null, // TRADER | ENTITY, obrigatório quando Trader é informado
+    decimal ValorOutros = 0 // demais ativos BMF, fixo por contrato
 );
 
 public record CopyConfigToTraderRequest(int BrokerId, string Trader, string? KeyType = null); // KeyType padrão: TRADER

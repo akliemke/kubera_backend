@@ -42,7 +42,7 @@ public class BillingIntegrationTests : IAsyncLifetime
         await SeedPreviousBracketFeeTracking(bracketId: 1, chargedFee: 2000m, tradeDate: new DateOnly(2024, 11, 10));
 
         // Today: JOAO operates 30M (total will be 70M, crossing into bracket 2)
-        await SeedOrder(1, 300_000, 100, "JOAO", "PETR4", "EQUITY");
+        await SeedOrder(1, 300_000, 100, "JOAO", "PETR4", "PETR");
 
         var service = CreateService();
 
@@ -88,8 +88,8 @@ public class BillingIntegrationTests : IAsyncLifetime
         // Today: 500 Mini(WIN) + 100 Cheio(IND)
         // Mini: 500 * 0.03 = 15, Cheio: 100 * 0.15 = 15, Total = 30
         // But CAP remaining = 25000 - 24950 = 50
-        await SeedOrder(1, 500, 0, "TRADER1", "WINZ24", "BMF", "WINZ24");
-        await SeedOrder(2, 100, 0, "TRADER1", "INDZ24", "BMF", "INDZ24");
+        await SeedOrder(1, 500, 0, "TRADER1", "WINZ24", "WIN");
+        await SeedOrder(2, 100, 0, "TRADER1", "INDZ24", "IND");
 
         var service = CreateService();
 
@@ -117,8 +117,8 @@ public class BillingIntegrationTests : IAsyncLifetime
         await SeedDefaultEquityBrackets();
         await SeedDefaultBmfConfig();
 
-        await SeedOrder(1, 100_000, 100, "TRADER1", "PETR4", "EQUITY"); // 10M notional
-        await SeedOrder(2, 200, 0, "TRADER1", "WINZ24", "BMF", "WINZ24"); // 200 Mini
+        await SeedOrder(1, 100_000, 100, "TRADER1", "PETR4", "PETR"); // 10M notional
+        await SeedOrder(2, 200, 0, "TRADER1", "WINZ24", "WIN"); // 200 Mini
 
         var service = CreateService();
 
@@ -155,8 +155,8 @@ public class BillingIntegrationTests : IAsyncLifetime
         await InsertEquityBracket(BrokerId, "TRADER_VIP", 0, null, 0.30m, 100000m);
 
         // Both trade 10M
-        await SeedOrder(1, 100_000, 100, "TRADER_NORMAL", "PETR4", "EQUITY");
-        await SeedOrder(2, 100_000, 100, "TRADER_VIP", "VALE3", "EQUITY");
+        await SeedOrder(1, 100_000, 100, "TRADER_NORMAL", "PETR4", "PETR");
+        await SeedOrder(2, 100_000, 100, "TRADER_VIP", "VALE3", "VALE");
 
         var service = CreateService();
 
@@ -189,9 +189,9 @@ public class BillingIntegrationTests : IAsyncLifetime
         await SeedEntityBillingConfig("MESA_A");
 
         // JOAO and MARIA both from MESA_A, PEDRO from MESA_B
-        await SeedOrder(1, 100_000, 100, "JOAO", "PETR4", "EQUITY", entity: "MESA_A"); // 10M
-        await SeedOrder(2, 50_000, 100, "MARIA", "VALE3", "EQUITY", entity: "MESA_A"); // 5M
-        await SeedOrder(3, 20_000, 100, "PEDRO", "ITUB4", "EQUITY", entity: "MESA_B"); // 2M
+        await SeedOrder(1, 100_000, 100, "JOAO", "PETR4", "PETR", entity: "MESA_A"); // 10M
+        await SeedOrder(2, 50_000, 100, "MARIA", "VALE3", "VALE", entity: "MESA_A"); // 5M
+        await SeedOrder(3, 20_000, 100, "PEDRO", "ITUB4", "ITUB", entity: "MESA_B"); // 2M
 
         var service = CreateService();
 
@@ -232,8 +232,8 @@ public class BillingIntegrationTests : IAsyncLifetime
         // AZUL54: qty=500, price=350000, notional = 500 * (350000/10000) = 17500
         // PETR4: qty=1000, price=30, notional = 30000
         // Total notional = 47500
-        await SeedOrder(1, 500, 350_000, "TRADER1", "AZUL54", "EQUITY");
-        await SeedOrder(2, 1000, 30, "TRADER1", "PETR4", "EQUITY");
+        await SeedOrder(1, 500, 350_000, "TRADER1", "AZUL54", "AZUL");
+        await SeedOrder(2, 1000, 30, "TRADER1", "PETR4", "PETR");
 
         var service = CreateService();
 
@@ -266,7 +266,7 @@ public class BillingIntegrationTests : IAsyncLifetime
             tradeDate: _tradeDate); // Same date!
 
         // Now seed the actual orders for reprocessing
-        await SeedOrder(1, 100_000, 100, "TRADER1", "PETR4", "EQUITY"); // 10M
+        await SeedOrder(1, 100_000, 100, "TRADER1", "PETR4", "PETR"); // 10M
 
         var service = CreateService();
 
@@ -299,11 +299,11 @@ public class BillingIntegrationTests : IAsyncLifetime
 
         // GTC order: CumQty=1000 (accumulated over multiple days), AvgPx=50 (stale VWAP)
         // But today only 200 shares were filled at price 55
-        await SeedOrder(1, 1000, 50, "TRADER1", "PETR4", "EQUITY", timeInForce: "GTC");
-        await SeedTrade(orderId: 1, lastQty: 200, lastPx: 55, "TRADER1", "PETR4", "EQUITY");
+        await SeedOrder(1, 1000, 50, "TRADER1", "PETR4", "PETR", timeInForce: "GTC");
+        await SeedTrade(orderId: 1, lastQty: 200, lastPx: 55, "TRADER1", "PETR4", "PETR");
 
         // DAY order: CumQty=300, AvgPx=100 (all fills are today by definition)
-        await SeedOrder(2, 300, 100, "TRADER1", "VALE3", "EQUITY");
+        await SeedOrder(2, 300, 100, "TRADER1", "VALE3", "VALE");
 
         var service = CreateService();
 
@@ -340,9 +340,9 @@ public class BillingIntegrationTests : IAsyncLifetime
         var day14 = new DateOnly(2024, 11, 14);
         var day15 = new DateOnly(2024, 11, 15);
 
-        await SeedOrder(1, 300_000, 100, "JOAO", "PETR4", "EQUITY", tradeDate: day13); // 30M
-        await SeedOrder(2, 300_000, 100, "JOAO", "PETR4", "EQUITY", tradeDate: day14); // 30M
-        await SeedOrder(3, 100_000, 100, "JOAO", "PETR4", "EQUITY", tradeDate: day15); // 10M
+        await SeedOrder(1, 300_000, 100, "JOAO", "PETR4", "PETR", tradeDate: day13); // 30M
+        await SeedOrder(2, 300_000, 100, "JOAO", "PETR4", "PETR", tradeDate: day14); // 30M
+        await SeedOrder(3, 100_000, 100, "JOAO", "PETR4", "PETR", tradeDate: day15); // 10M
 
         var service = CreateService();
         foreach (var day in new[] { day13, day14, day15 })
@@ -352,7 +352,7 @@ public class BillingIntegrationTests : IAsyncLifetime
         Assert.Equal(1050m, (await GetDailyBilling("JOAO", "EQUITY", day14))!.TotalFee);
 
         // Late correction on day 13: +20M (day 13 becomes 50M)
-        await SeedOrder(4, 200_000, 100, "JOAO", "PETR4", "EQUITY", tradeDate: day13);
+        await SeedOrder(4, 200_000, 100, "JOAO", "PETR4", "PETR", tradeDate: day13);
 
         // Act: reprocess ONLY day 13
         await service.ProcessBrokerAsync(BrokerId, day13, ProcessBillingId, CancellationToken.None);
@@ -381,7 +381,7 @@ public class BillingIntegrationTests : IAsyncLifetime
     {
         await SeedBroker();
         await SeedDefaultEquityBrackets();
-        await SeedOrder(1, 100_000, 100, "TRADER1", "PETR4", "EQUITY");
+        await SeedOrder(1, 100_000, 100, "TRADER1", "PETR4", "PETR");
 
         var service = CreateService();
         await service.ProcessBrokerAsync(BrokerId, _tradeDate, ProcessBillingId, CancellationToken.None);
@@ -406,7 +406,7 @@ public class BillingIntegrationTests : IAsyncLifetime
     {
         await SeedBroker();
         await InsertEquityBracket(BrokerId, null, 0m, null, 0.5m, cap: null);
-        await SeedOrder(1, 1_000_000, 100, "TRADER1", "PETR4", "EQUITY"); // 100M -> 5000, no cap
+        await SeedOrder(1, 1_000_000, 100, "TRADER1", "PETR4", "PETR"); // 100M -> 5000, no cap
 
         await CreateService().ProcessBrokerAsync(BrokerId, _tradeDate, ProcessBillingId, CancellationToken.None);
 
@@ -424,8 +424,8 @@ public class BillingIntegrationTests : IAsyncLifetime
         await SeedBroker();
         await SeedDefaultEquityBrackets();
         await SeedEntityBillingConfig("MESA_A");
-        await SeedOrder(1, 100_000, 100, "JOAO", "PETR4", "EQUITY", entity: "mesa_a");
-        await SeedOrder(2, 100_000, 100, "MARIA", "VALE3", "EQUITY", entity: "MESA_A");
+        await SeedOrder(1, 100_000, 100, "JOAO", "PETR4", "PETR", entity: "mesa_a");
+        await SeedOrder(2, 100_000, 100, "MARIA", "VALE3", "VALE", entity: "MESA_A");
 
         await CreateService().ProcessBrokerAsync(BrokerId, _tradeDate, ProcessBillingId, CancellationToken.None);
 
@@ -449,8 +449,8 @@ public class BillingIntegrationTests : IAsyncLifetime
             tradeDate: _tradeDate.AddDays(-1), keyType: BillingKeyTypes.Entity);
         await SeedPreviousBracketFeeTracking(bracketId: 1, chargedFee: 2100m, tradeDate: _tradeDate.AddDays(-1));
 
-        await SeedOrder(1, 100_000, 100, "MARIA", "PETR4", "EQUITY", entity: "JOAO"); // 10M -> entity JOAO
-        await SeedOrder(2, 100_000, 100, "JOAO", "VALE3", "EQUITY", entity: "MESA_B"); // 10M -> trader JOAO
+        await SeedOrder(1, 100_000, 100, "MARIA", "PETR4", "PETR", entity: "JOAO"); // 10M -> entity JOAO
+        await SeedOrder(2, 100_000, 100, "JOAO", "VALE3", "VALE", entity: "MESA_B"); // 10M -> trader JOAO
 
         await CreateService().ProcessBrokerAsync(BrokerId, _tradeDate, ProcessBillingId, CancellationToken.None);
 
@@ -480,8 +480,8 @@ public class BillingIntegrationTests : IAsyncLifetime
         await SeedEntityBillingConfig("MESA_A");
         await InsertEquityBracket(BrokerId, "JOAO", 0, null, 0.20m, null);
 
-        await SeedOrder(1, 100_000, 100, "JOAO", "PETR4", "EQUITY", entity: "MESA_A");  // 10M
-        await SeedOrder(2, 100_000, 100, "MARIA", "VALE3", "EQUITY", entity: "MESA_A"); // 10M
+        await SeedOrder(1, 100_000, 100, "JOAO", "PETR4", "PETR", entity: "MESA_A");  // 10M
+        await SeedOrder(2, 100_000, 100, "MARIA", "VALE3", "VALE", entity: "MESA_A"); // 10M
 
         await CreateService().ProcessBrokerAsync(BrokerId, _tradeDate, ProcessBillingId, CancellationToken.None);
 
@@ -544,6 +544,66 @@ public class BillingIntegrationTests : IAsyncLifetime
     }
 
     // ==========================================
+    // AssetClass is derived from Asset (root); unrecognized roots are not billed
+    // ==========================================
+    [Fact]
+    public async Task AssetClass_DeduzidaPelaRaiz_RaizDesconhecidaNaoCobrada()
+    {
+        await SeedBroker();
+        await SeedDefaultEquityBrackets();
+        await SeedDefaultBmfConfig();
+
+        await SeedOrder(1, 100_000, 100, "TRADER1", "B3SA3", "B3SA"); // EQUITY (issuer root with digit)
+        await SeedOrder(2, 100, 0, "TRADER1", "BGIV24", "BGI");        // BMF, other contract: 100 * 0.07
+        await SeedOrder(3, 100, 10, "TRADER1", "XX1", "X");            // unrecognized root
+
+        await CreateService().ProcessBrokerAsync(BrokerId, _tradeDate, ProcessBillingId, CancellationToken.None);
+
+        Assert.Equal(500m, (await GetDailyBilling("TRADER1", "EQUITY"))!.TotalFee);
+        Assert.Equal(7m, (await GetDailyBilling("TRADER1", "BMF"))!.TotalFee);
+
+        await using var conn = new NpgsqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        Assert.Equal(0, await conn.ExecuteScalarAsync<int>(
+            "SELECT COUNT(*) FROM financial_engine.order_billing WHERE OrderId = 3"));
+    }
+
+    // ==========================================
+    // Synthetic (BTGDOL = DOL + WDO): the view returns one row per leg, LastQty in cheio units
+    // ==========================================
+    [Fact]
+    public async Task Sintetico_ViewQuebraPorPerna_CobraMiniECheio()
+    {
+        await SeedBroker();
+        await SeedDefaultBmfConfig();
+
+        // Only the synthetic order arrives (Asset DOL); legs come from the UniqueTradeId suffix
+        await SeedOrder(1, 4, 5800, "TRADER1", "BTGDOLZ24", "DOL");
+        await SeedTrade(orderId: 1, lastQty: 0.2m, lastPx: 5800, "TRADER1", "BTGDOLZ24", "DOL", uniqueTradeId: "1001-WDO");
+        await SeedTrade(orderId: 1, lastQty: 1.8m, lastPx: 5800, "TRADER1", "BTGDOLZ24", "DOL", uniqueTradeId: "1002-WDO");
+        await SeedTrade(orderId: 1, lastQty: 2m, lastPx: 5800, "TRADER1", "BTGDOLZ24", "DOL", uniqueTradeId: "1003-DOL");
+
+        await CreateService().ProcessBrokerAsync(BrokerId, _tradeDate, ProcessBillingId, CancellationToken.None);
+
+        // WDO: 2.0 cheio * 5 = 10 minis * 0.03 = 0.30; DOL: 2 * 0.15 = 0.30
+        var billing = await GetDailyBilling("TRADER1", "BMF");
+        Assert.Equal(12m, billing!.TotalQty);
+        Assert.Equal(0.60m, billing.TotalFee);
+
+        var legs = (await GetOrderBillings(billing.Id)).OrderBy(o => o.Asset).ToList();
+        Assert.Equal(new[] { "DOL", "WDO" }, legs.Select(o => o.Asset));
+        Assert.All(legs, o => Assert.Equal(1, o.OrderId));
+        Assert.Equal(new[] { 2m, 10m }, legs.Select(o => o.Qty));
+
+        // Report detail: one line per leg, not duplicated by the view join
+        var detail = await new OrderBillingRepository(CreateDbFactory())
+            .GetByBrokerAndMonthAsync(BrokerId, _tradeDate.Year, _tradeDate.Month, CancellationToken.None);
+        Assert.Equal(2, detail.Count);
+        Assert.All(detail, d => Assert.Equal("BTGDOLZ24", d.Symbol));
+        Assert.Equal(0.60m, detail.Sum(d => d.FeeAmount));
+    }
+
+    // ==========================================
     // Test 14: Market Data is added automatically at the end of the broker's billing
     // ==========================================
     [Fact]
@@ -551,7 +611,7 @@ public class BillingIntegrationTests : IAsyncLifetime
     {
         await SeedBroker();
         await SeedDefaultEquityBrackets();
-        await SeedOrder(1, 100_000, 100, "JOAO", "PETR4", "EQUITY");
+        await SeedOrder(1, 100_000, 100, "JOAO", "PETR4", "PETR");
 
         // JOAO linked on 2 days (charged once), maria on 1 day, API_BOT globally excluded,
         // ADMIN1 excluded only for this broker, other broker's user ignored
@@ -780,25 +840,24 @@ public class BillingIntegrationTests : IAsyncLifetime
         await conn.OpenAsync();
         await conn.ExecuteAsync(@"
             INSERT INTO financial_engine.bmf_fee_configs
-                (Broker, Trader, ValidFrom, ValidTo, ValorMini, ValorCheio,
+                (Broker, Trader, ValidFrom, ValidTo, ValorMini, ValorCheio, ValorOutros,
                  DI1Venc1a4, DI1Venc5, DI1Venc6, DI1Venc7, DI1Venc8Plus, CapMensal, IsActive)
-            VALUES (@Broker, NULL, '2024-01-01', '2099-12-31', 0.03, 0.15,
+            VALUES (@Broker, NULL, '2024-01-01', '2099-12-31', 0.03, 0.15, 0.07,
                     0.01, 0.02, 0.04, 0.05, 0.10, 25000, TRUE)",
             new { Broker = BrokerId });
     }
 
     private async Task SeedOrder(long id, decimal qty, decimal price, string trader, string symbol,
-        string assetClass, string? exchangeSymbol = null, string entity = "MESA1", string? timeInForce = null,
-        DateOnly? tradeDate = null)
+        string asset, string entity = "MESA1", string? timeInForce = null, DateOnly? tradeDate = null)
     {
         var date = tradeDate ?? _tradeDate;
         await using var conn = new NpgsqlConnection(_db.ConnectionString);
         await conn.OpenAsync();
         await conn.ExecuteAsync(@"
             INSERT INTO history.orders
-                (Id, CumQty, AvgPx, Symbol, ExchangeSymbol, AssetClass, EnteringTrader,
+                (Id, CumQty, AvgPx, Symbol, Asset, EnteringTrader,
                  Entity, TradeDate, EnteringFirm, OmsInstance, Side, businessDate, TimeInForce)
-            VALUES (@Id, @CumQty, @AvgPx, @Symbol, @ExchangeSymbol, @AssetClass, @EnteringTrader,
+            VALUES (@Id, @CumQty, @AvgPx, @Symbol, @Asset, @EnteringTrader,
                     @Entity, @TradeDate, @EnteringFirm, 'OMS1', 'BUY', @BusinessDate, @TimeInForce)",
             new
             {
@@ -806,8 +865,7 @@ public class BillingIntegrationTests : IAsyncLifetime
                 CumQty = qty,
                 AvgPx = price,
                 Symbol = symbol,
-                ExchangeSymbol = exchangeSymbol ?? symbol,
-                AssetClass = assetClass,
+                Asset = asset,
                 EnteringTrader = trader,
                 Entity = entity,
                 TradeDate = date,
@@ -883,24 +941,24 @@ public class BillingIntegrationTests : IAsyncLifetime
     }
 
     private async Task SeedTrade(long orderId, decimal lastQty, decimal lastPx, string trader,
-        string symbol, string assetClass, string? exchangeSymbol = null, string entity = "MESA1")
+        string symbol, string asset, string entity = "MESA1", string? uniqueTradeId = null)
     {
         await using var conn = new NpgsqlConnection(_db.ConnectionString);
         await conn.OpenAsync();
         await conn.ExecuteAsync(@"
             INSERT INTO history.trades
-                (OrderId, LastQty, LastPx, Symbol, ExchangeSymbol, AssetClass, EnteringTrader,
+                (OrderId, LastQty, LastPx, UniqueTradeId, Symbol, Asset, EnteringTrader,
                  Entity, TradeDate, EnteringFirm, OmsInstance, Side, businessDate)
-            VALUES (@OrderId, @LastQty, @LastPx, @Symbol, @ExchangeSymbol, @AssetClass, @EnteringTrader,
+            VALUES (@OrderId, @LastQty, @LastPx, @UniqueTradeId, @Symbol, @Asset, @EnteringTrader,
                     @Entity, @TradeDate, @EnteringFirm, 'OMS1', 'BUY', @BusinessDate)",
             new
             {
                 OrderId = orderId,
                 LastQty = lastQty,
                 LastPx = lastPx,
+                UniqueTradeId = uniqueTradeId,
                 Symbol = symbol,
-                ExchangeSymbol = exchangeSymbol ?? symbol,
-                AssetClass = assetClass,
+                Asset = asset,
                 EnteringTrader = trader,
                 Entity = entity,
                 TradeDate = _tradeDate,

@@ -1,4 +1,5 @@
 using Dapper;
+using FinancialEngineCore.Domain;
 using FinancialEngineCore.Model;
 
 namespace FinancialEngineCore.Infra;
@@ -17,7 +18,7 @@ public class OrdersRepository
         const string sql = "SELECT * FROM history.vw_billable_orders WHERE businessDate = @BusinessDate";
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
         var orders = await conn.QueryAsync<Order>(sql, new { BusinessDate = businessDate });
-        return orders.ToList();
+        return Classify(orders);
     }
 
     public async Task<List<Order>> GetOrdersByBrokerAsync(
@@ -36,7 +37,18 @@ public class OrdersRepository
             BusinessDate = tradeDate.ToString("yyyy-MM-dd"),
             BrokerId = brokerId.ToString()
         });
-        return orders.ToList();
+        return Classify(orders);
+    }
+
+    /// <summary>
+    /// A base de ordens não traz AssetClass: classifica pela raiz (Asset) / Symbol. Ponto único de classificação.
+    /// </summary>
+    private static List<Order> Classify(IEnumerable<Order> orders)
+    {
+        var list = orders.ToList();
+        foreach (var order in list)
+            order.AssetClass = AssetClassifier.Classify(order.Asset, order.Symbol);
+        return list;
     }
 
     /// <summary>

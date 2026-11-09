@@ -32,12 +32,12 @@ public class BrokerBillingContext
 
         // GroupBy + Sum: rows that differ only by casing collapse into the same key
         _equityAccumulated = monthSummaries
-            .Where(s => s.AssetClass.Equals("EQUITY", StringComparison.OrdinalIgnoreCase))
+            .Where(s => s.AssetClass.Equals(AssetClasses.Equity, StringComparison.OrdinalIgnoreCase))
             .GroupBy(s => new BillingKey(s.KeyType, s.Trader))
             .ToDictionary(g => g.Key, g => g.Sum(s => s.TotalNotional));
 
         _bmfFeeCharged = monthSummaries
-            .Where(s => s.AssetClass.Equals("BMF", StringComparison.OrdinalIgnoreCase))
+            .Where(s => s.AssetClass.Equals(AssetClasses.Bmf, StringComparison.OrdinalIgnoreCase))
             .GroupBy(s => new BillingKey(s.KeyType, s.Trader))
             .ToDictionary(g => g.Key, g => g.Sum(s => s.TotalFee));
 
@@ -79,10 +79,10 @@ public class BrokerBillingContext
     {
         var key = BillingKey.Trader(trader);
 
-        if (assetClass.Equals("EQUITY", StringComparison.OrdinalIgnoreCase))
+        if (assetClass.Equals(AssetClasses.Equity, StringComparison.OrdinalIgnoreCase))
             return _allEquityBrackets.Any(b => key.Matches(b.KeyType, b.Trader));
 
-        if (assetClass.Equals("BMF", StringComparison.OrdinalIgnoreCase))
+        if (assetClass.Equals(AssetClasses.Bmf, StringComparison.OrdinalIgnoreCase))
             return _allBmfConfigs.Any(c => key.Matches(c.KeyType, c.Trader));
 
         return false;

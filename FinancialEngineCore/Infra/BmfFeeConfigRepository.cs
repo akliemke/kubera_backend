@@ -47,10 +47,10 @@ public class BmfFeeConfigRepository
     {
         const string sql = @"
             INSERT INTO financial_engine.bmf_fee_configs
-                (Broker, Trader, KeyType, ValidFrom, ValidTo, ValorMini, ValorCheio,
+                (Broker, Trader, KeyType, ValidFrom, ValidTo, ValorMini, ValorCheio, ValorOutros,
                  DI1Venc1a4, DI1Venc5, DI1Venc6, DI1Venc7, DI1Venc8Plus, CapMensal, IsActive)
             VALUES
-                (@Broker, @Trader, @KeyType, @ValidFrom, @ValidTo, @ValorMini, @ValorCheio,
+                (@Broker, @Trader, @KeyType, @ValidFrom, @ValidTo, @ValorMini, @ValorCheio, @ValorOutros,
                  @DI1Venc1a4, @DI1Venc5, @DI1Venc6, @DI1Venc7, @DI1Venc8Plus, @CapMensal, @IsActive)
             RETURNING *";
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
@@ -62,7 +62,7 @@ public class BmfFeeConfigRepository
         const string sql = @"
             UPDATE financial_engine.bmf_fee_configs
             SET Broker = @Broker, Trader = @Trader, KeyType = @KeyType, ValidFrom = @ValidFrom, ValidTo = @ValidTo,
-                ValorMini = @ValorMini, ValorCheio = @ValorCheio,
+                ValorMini = @ValorMini, ValorCheio = @ValorCheio, ValorOutros = @ValorOutros,
                 DI1Venc1a4 = @DI1Venc1a4, DI1Venc5 = @DI1Venc5, DI1Venc6 = @DI1Venc6,
                 DI1Venc7 = @DI1Venc7, DI1Venc8Plus = @DI1Venc8Plus, CapMensal = @CapMensal, IsActive = @IsActive
             WHERE Id = @Id";

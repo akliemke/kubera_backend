@@ -8,7 +8,7 @@ namespace FinancialEngineCore.Domain.Strategies;
 /// </summary>
 public class EquityCalculationStrategy : ICalculationStrategy
 {
-    public string AssetClass => "EQUITY";
+    public string AssetClass => AssetClasses.Equity;
 
     public BillingCalculationResult Calculate(
         int brokerId,
@@ -87,7 +87,7 @@ public class EquityCalculationStrategy : ICalculationStrategy
             KeyType = key.Type,
             Broker = broker,
             TradeDate = tradeDate,
-            AssetClass = "EQUITY",
+            AssetClass = AssetClasses.Equity,
             TotalNotional = totalNotional,
             TotalQty = 0,
             TotalFee = totalFee,
@@ -188,6 +188,7 @@ public class EquityCalculationStrategy : ICalculationStrategy
         return orders.Select((o, i) => new OrderFeeResult
         {
             OrderId = o.Id,
+            Asset = o.Asset,
             Notional = notionals[i],
             Qty = 0,
             FeeAmount = fees[i]

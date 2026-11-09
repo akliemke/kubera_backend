@@ -70,6 +70,7 @@ CREATE TABLE financial_engine.bmf_fee_configs (
     ValidTo DATE NOT NULL,
     ValorMini DECIMAL(10,4) NOT NULL,
     ValorCheio DECIMAL(10,4) NOT NULL,
+    ValorOutros DECIMAL(10,4) NOT NULL DEFAULT 0, -- demais ativos BMF: fixo por contrato
     DI1Venc1a4 DECIMAL(10,4) NOT NULL,
     DI1Venc5 DECIMAL(10,4) NOT NULL,
     DI1Venc6 DECIMAL(10,4) NOT NULL,
@@ -112,6 +113,7 @@ CREATE INDEX idx_daily_billing_month ON financial_engine.daily_billing(Broker, K
 CREATE TABLE financial_engine.order_billing (
     Id BIGSERIAL PRIMARY KEY,
     OrderId BIGINT NOT NULL,
+    Asset VARCHAR(50) NULL,             -- raiz do ativo; sintetico gera 1 linha por perna (mesmo OrderId)
     DailyBillingId BIGINT NOT NULL REFERENCES financial_engine.daily_billing(Id) ON DELETE CASCADE,
     Broker INT NOT NULL,
     Trader VARCHAR(100) NOT NULL,
@@ -246,9 +248,8 @@ CREATE TABLE history.orders (
     Id BIGSERIAL PRIMARY KEY,
     CumQty DECIMAL(18,4) NOT NULL,
     AvgPx DECIMAL(18,6) NOT NULL,
-    Symbol VARCHAR(50) NOT NULL,
-    ExchangeSymbol VARCHAR(50),
-    AssetClass VARCHAR(20) NOT NULL,
+    Symbol VARCHAR(50) NOT NULL,        -- ex: PETR4, WINZ25, DI1F27, BTGDOLZ26 (sintetico)
+    Asset VARCHAR(50) NULL,             -- raiz do ativo: PETR, WIN, DI1, DOL (AssetClass e deduzida no codigo)
     EnteringTrader VARCHAR(100) NOT NULL,
     Entity VARCHAR(100) NOT NULL,
     TradeDate DATE NOT NULL,
@@ -266,10 +267,10 @@ CREATE TABLE history.trades (
     Id BIGSERIAL PRIMARY KEY,
     OrderId BIGINT NOT NULL,
     LastQty DECIMAL(18,4) NOT NULL,
-    LastPx DECIMAL(18,6) NOT NULL,
+    LastPx DECIMAL(18,6) NOT NULL,      -- LastQty no padrao do contrato cheio (sintetico: 0,2 WDO = 1 mini)
+    UniqueTradeId VARCHAR(100) NULL,    -- sintetico: sufixo indica a perna (1234-WDO, 321-DOL)
     Symbol VARCHAR(50) NOT NULL,
-    ExchangeSymbol VARCHAR(50),
-    AssetClass VARCHAR(20) NOT NULL,
+    Asset VARCHAR(50) NULL,
     EnteringTrader VARCHAR(100) NOT NULL,
     Entity VARCHAR(100) NOT NULL,
     TradeDate DATE NOT NULL,
@@ -317,31 +318,55 @@ SELECT
 FROM financial_engine.daily_billing
 GROUP BY Broker, DATE_TRUNC('month', TradeDate), AssetClass;
 
+-- Ordens cobraveis do dia. AssetClass nao existe na base: e deduzida no codigo (AssetClassifier) por Asset/Symbol.
+-- Sintetico = Symbol que nao comeca com o Asset (ex: BTGDOLZ26, Asset DOL).
 CREATE VIEW history.vw_billable_orders AS
 
--- Non-GTC/GTD ou non-EQUITY: passthrough
-SELECT Id, CumQty, AvgPx, Symbol, ExchangeSymbol, AssetClass,
+-- Ordem normal (nao GTC/GTD, nao sintetico): passthrough
+SELECT Id, CumQty, AvgPx, Symbol, Asset,
        EnteringTrader, Entity, TradeDate, EnteringFirm, OmsInstance, Side,
        businessDate, TimeInForce
 FROM history.orders
-WHERE TimeInForce IS NULL
-   OR TimeInForce NOT IN ('GTC', 'GTD')
-   OR AssetClass != 'EQUITY'
+WHERE (TimeInForce IS NULL OR TimeInForce NOT IN ('GTC', 'GTD'))
+  AND (Asset IS NULL OR Symbol LIKE Asset || '%')
 
 UNION ALL
 
--- GTC/GTD EQUITY: agrega trades do dia (VWAP)
+-- GTC/GTD (so existe em EQUITY): agrega trades do dia (VWAP)
 SELECT o.Id,
        SUM(t.LastQty) as CumQty,
        SUM(t.LastQty * t.LastPx) / SUM(t.LastQty) as AvgPx,
-       o.Symbol, o.ExchangeSymbol, o.AssetClass,
+       o.Symbol, o.Asset,
        o.EnteringTrader, o.Entity, o.TradeDate, o.EnteringFirm,
        o.OmsInstance, o.Side, o.businessDate, o.TimeInForce
 FROM history.orders o
 INNER JOIN history.trades t ON t.OrderId = o.Id AND t.businessDate = o.businessDate
 WHERE o.TimeInForce IN ('GTC', 'GTD')
-  AND o.AssetClass = 'EQUITY'
-GROUP BY o.Id, o.Symbol, o.ExchangeSymbol, o.AssetClass,
+  AND (o.Asset IS NULL OR o.Symbol LIKE o.Asset || '%')
+GROUP BY o.Id, o.Symbol, o.Asset,
+         o.EnteringTrader, o.Entity, o.TradeDate, o.EnteringFirm,
+         o.OmsInstance, o.Side, o.businessDate, o.TimeInForce
+
+UNION ALL
+
+-- Sintetico: 1 linha por perna (sufixo do UniqueTradeId), Asset = perna.
+-- LastQty vem no padrao do cheio: converte pelo fator da perna (1 DOL = 5 WDO). Perna sem fator = 1;
+-- trade sem sufixo vira perna '?' (nao classificada: nao cobrada, gera warning).
+SELECT o.Id,
+       SUM(t.LastQty) * COALESCE(MAX(f.Factor), 1) as CumQty,
+       SUM(t.LastQty * t.LastPx) / SUM(t.LastQty) as AvgPx,
+       o.Symbol, leg.Leg as Asset,
+       o.EnteringTrader, o.Entity, o.TradeDate, o.EnteringFirm,
+       o.OmsInstance, o.Side, o.businessDate, o.TimeInForce
+FROM history.orders o
+INNER JOIN history.trades t ON t.OrderId = o.Id AND t.businessDate = o.businessDate
+CROSS JOIN LATERAL (
+    SELECT COALESCE(UPPER(substring(t.UniqueTradeId from '-([^-]+)$')), '?') as Leg
+) leg
+LEFT JOIN (VALUES ('WDO', 5), ('DOL', 1)) AS f(Leg, Factor) ON f.Leg = leg.Leg
+WHERE o.Asset IS NOT NULL
+  AND o.Symbol NOT LIKE o.Asset || '%'
+GROUP BY o.Id, leg.Leg, o.Symbol,
          o.EnteringTrader, o.Entity, o.TradeDate, o.EnteringFirm,
          o.OmsInstance, o.Side, o.businessDate, o.TimeInForce;
 
