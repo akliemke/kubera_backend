@@ -89,7 +89,7 @@ public class EquityFeeBracketRepository
             WHERE Broker = @BrokerId
               AND IsActive = TRUE
               AND @TradeDate >= ValidFrom
-              AND @TradeDate < ValidTo
+              AND @TradeDate <= ValidTo
             ORDER BY Trader NULLS LAST, NotionalFrom ASC";
 
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);

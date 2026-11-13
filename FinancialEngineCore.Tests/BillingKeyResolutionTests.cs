@@ -214,4 +214,19 @@ public class BillingKeyResolutionTests
         Assert.Equal(150m, context.GetEquityAccumulated(BillingKey.Trader("JOAO")));
         Assert.Equal(900m, context.GetEquityAccumulated(BillingKey.Entity("JOAO")));
     }
+
+    [Fact]
+    public void BuildPriceFactorMap_DuplicateSymbol_MostRecentWinsAndCaseInsensitive()
+    {
+        var factors = new[]
+        {
+            new PriceModificationFactor { Id = 1, Symbol = "AZUL54", Factor = 1_000, ValidFrom = new DateOnly(2026, 1, 1) },
+            new PriceModificationFactor { Id = 2, Symbol = "azul54", Factor = 10_000, ValidFrom = new DateOnly(2026, 6, 1) },
+        };
+
+        var map = BillingProcessingService.BuildPriceFactorMap(factors);
+
+        Assert.Single(map);
+        Assert.Equal(10_000m, map["AZUL54"]);
+    }
 }

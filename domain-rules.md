@@ -57,9 +57,10 @@ Para cada (BillingKey, Broker, Mes):
 - **CAP nullable: NULL = sem teto**; CAP = 0 = faixa nao cobra nada (explicito)
 - **Volume fora de qualquer faixa nao e cobrado**: abaixo da primeira faixa (se nao comeca em 0) e em lacunas entre faixas. A posicao avanca normalmente pelo trecho nao cobrado
 - **Fee ja cobrado por faixa e indexado por NotionalFrom** (nao pelo Id): se a faixa muda de versao no meio do mes (novo ValidFrom) ou o trader passa de padrao para especial, o CAP ja consumido continua valendo para a faixa que comeca no mesmo volume
-- Se nao ha faixas ou notional <= 0: retorna fee zero
+- Se nao ha faixas ou notional <= 0: retorna fee zero (sem faixas: log WARNING, igual a BMF sem config)
 - Se PriceModificationFactor = 0: ignorado (previne divisao por zero)
 - CAP remaining nunca negativo (floor em 0)
+- **Arredondamento**: fee calculado de cada faixa arredondado para centavos (AwayFromZero) **antes** do CAP; `ChargedFee` e `TotalFee` sempre em centavos (= soma das ordens). `CalculatedFee` fica sem arredondar (auditoria)
 
 ### BracketFeeTracking (auditoria)
 Cada faixa usada gera registro com:
@@ -71,19 +72,47 @@ Cada faixa usada gera registro com:
 
 ---
 
+## Classificacao de Ativos (AssetClass)
+
+A base nao traz AssetClass. `history.orders` so tem **Symbol** (PETR4, WINZ25, DI1F27); **Asset** (raiz do ativo: PETR, WIN, DI1)
+existe **so em `history.trades`**. A `vw_billable_orders` traz o Asset do primeiro trade da ordem (LATERAL); ordem sem trade sai com Asset NULL.
+`AssetClassifier.Classify(asset, symbol)` (regra fixa no codigo, nomenclatura B3) e chamado no `OrdersRepository`
+logo apos a leitura da view (ponto unico):
+
+| Raiz (Asset) | Classe | Exemplos |
+|--------------|--------|----------|
+| 4 caracteres alfanumericos (codigo de emissor) | EQUITY | PETR4, PETR4F, BOVA11, HGLG11, AAPL34, B3SA3, PETRK300 |
+| 3 caracteres alfanumericos (codigo de mercadoria) | BMF | WINZ25, DOLZ26, DI1F27, BGIV25, CCMK26 |
+| Outro | UNKNOWN | nao cobrado (sem strategy -> log WARNING com Symbol/Asset) |
+
+- Asset vazio: deduz pelo Symbol (`RAIZ(3)+mes+ano(2)` -> BMF; 4 primeiros caracteres -> EQUITY).
+  O Asset e preferido porque o Symbol sozinho e ambiguo (BDR `XXXU34` casa com o padrao de futuro)
+
+### Sinteticos BMF (ex.: BTGDOLZ26 = DOL cheio + WDO mini)
+- Sintetico = Symbol da ordem que **nao comeca com o Asset dos trades** (BTGDOLZ26, trades com Asset DOL). Regra generica, sem depender do prefixo BTG
+- So a ordem do sintetico chega (nao ha ordens filhas). A perna de cada trade vem no sufixo do `UniqueTradeId` (`1234-WDO`, `321-DOL`)
+- `LastQty` vem no padrao do cheio: a perna e convertida pelo fator (1 DOL = 5 WDO; LastQty 0,2 na perna WDO = 1 mini).
+  Fatores na tabela inline da view `(VALUES ('WDO', 5), ('DOL', 1))`; perna sem fator = 1
+- A `vw_billable_orders` devolve **uma linha por perna** (mesmo `Id`, `Asset` = perna, `CumQty` convertido, VWAP). O calculo nao sabe que existe sintetico
+- `order_billing` fica com uma linha por perna (mesmo OrderId, coluna `Asset`). O detalhamento do PDF faz join com `history.orders` (nao com a view) para nao duplicar e mostra `BTGDOLZ26 (WDO)`
+- Trade sem sufixo no UniqueTradeId -> perna `?` -> UNKNOWN (nao cobrado, warning). Sintetico sem trade no dia nao entra
+
+---
+
 ## Calculo BMF (Futuros)
 
 Cobranca por numero de contratos, com valor fixo por tipo. CAP mensal unico.
 
 ### Classificacao de Contratos
-Tipo determinado pelo prefixo do ExchangeSymbol (primeiros 3 caracteres):
+Tipo determinado pela raiz do contrato (`Asset`; sem Asset, os 3 primeiros caracteres do Symbol):
 
-| Prefixo | Tipo | Fee |
-|---------|------|-----|
+| Raiz | Tipo | Fee |
+|------|------|-----|
 | WIN, WDO | Mini | config.ValorMini por contrato |
 | IND, DOL | Cheio | config.ValorCheio por contrato |
-| DI1 | DI1 | varia por vencimento (ver tabela) |
-| Outro | Desconhecido | R$ 0,00 (log WARNING com os simbolos) |
+| DI1 | DI1 | varia por vencimento (lido do Symbol, ver tabela) |
+| Qualquer outra (BGI, CCM, opcoes sobre futuro...) | Demais | config.ValorOutros por contrato |
+| Vazia | Desconhecido | R$ 0,00 (log WARNING com os simbolos) |
 
 ### DI1 - Calculo de Vencimento
 
@@ -104,9 +133,10 @@ Formato do simbolo: `DI1` + codigo_mes(1 char) + ano(2 digitos). Ex: `DI1F25` = 
 mesesAteVencimento = (anoVenc - anoTrade) * 12 + (mesVenc - mesTrade)
 vencimento = max(1, mesesAteVencimento)
 ```
+- Vencimento = meses corridos a partir do mes do trade (confirmado pelo negocio), nao a ordem dos vencimentos listados na B3. Ex.: trade em Nov/26 -> DI1X26 = 1 (vence no proprio mes: tambem 1), DI1Z26 = 1, DI1F27 = 2, DI1N27 = 8
 - Ano 2 digitos convertido: `ano < 100 ? ano + 2000 : ano`
 - Simbolo curto (< 5 chars) ou invalido: vencimento = 1 (tier mais barato)
-- ExchangeSymbol vazio/null para DI1: usa fee de venc 1-4
+- Symbol vazio para DI1: usa fee de venc 1-4
 
 ### DI1 por Vencimento
 | Vencimento | Campo config |
@@ -120,6 +150,7 @@ vencimento = max(1, mesesAteVencimento)
 ### CAP mensal
 - `CapMensal` NULL = sem teto; 0 = nao cobra nada
 - Fee ja cobrado no mes = soma de TotalFee BMF da BillingKey nos dias anteriores
+- Fee do dia arredondado para centavos (AwayFromZero) antes do CAP
 
 ### Exemplo com CAP
 ```
@@ -130,7 +161,7 @@ Cobra: R$ 15 (limitado pelo CAP)
 
 ### Fallbacks BMF
 - Config BMF nao encontrada: log WARNING + retorna fee zero (soft failure, nao lanca excecao). AccumulatedBefore/After = fee ja cobrado no mes
-- Tipo de contrato desconhecido: fee = 0 por contrato, simbolos retornados em `UnknownSymbols` e logados como WARNING
+- Raiz vazia: fee = 0 por contrato, simbolos retornados em `UnknownSymbols` e logados como WARNING
 - Fee por ordem proporcional a quantidade (ver Distribuicao Proporcional)
 
 ---
@@ -139,22 +170,45 @@ Cobra: R$ 15 (limitado pelo CAP)
 
 - **EQUITY GTC/GTD**: a ordem pode durar varios dias e o `CumQty` dela e cumulativo. Por isso o calculo usa os trades do dia (`history.trades`): qtd = soma de `LastQty` do dia e preco = VWAP do dia. Se a ordem nao teve trade no dia, ela nao entra
 - **Demais ordens (DAY etc.)**: usam `CumQty`/`AvgPx` direto da ordem
-- **BMF**: nao existem ordens GTC/GTD (confirmado pelo negocio), por isso a view so agrega trades para EQUITY
+- **BMF**: nao existem ordens GTC/GTD (confirmado pelo negocio). Como a view nao conhece a AssetClass, o ramo GTC/GTD agrega qualquer ordem GTC/GTD que nao seja sintetico
 
 ---
 
-## Contratos Especiais (Trader + Broker)
+## BillingKey (identificacao do cliente cobrado)
 
-Regras especiais na **mesma tabela**, campo Trader nullable:
-| Broker | Trader | Tipo |
-|--------|--------|------|
-| 123 | NULL | Regra **padrao** |
-| 123 | "JOAO" | Regra **especial** (100% custom, ignora padrao) |
+A chave de cobranca e o par **(KeyType, Key)**, gravado em `daily_billing`/`order_billing` nas colunas `KeyType` + `Trader`:
+- `TRADER`: Key = `EnteringTrader` da ordem
+- `ENTITY`: Key = Entity (grafia da `EntityBillingConfig`)
+
+Entity e trader com o **mesmo nome sao chaves diferentes**: volume acumulado, CAPs por faixa, CAP mensal BMF e piso nao se misturam.
+Key comparada case-insensitive; KeyType exato.
+
+Resolucao por ordem, **por AssetClass** (`BillingProcessingService.ResolveBillingKey`):
+1. Trader tem regra especial **TRADER** valida no dia para a AssetClass da ordem (EQUITY: faixa especial; BMF: config especial) -> `(TRADER, EnteringTrader)`. **A regra especial do trader prevalece sobre a entity**: ele sai da entity (volume dele nao conta nas faixas nem no piso da entity). Log INFO quando isso acontece
+2. Senao, Entity da ordem tem `EntityBillingConfig` valida -> `(ENTITY, Entity)`
+3. Senao -> `(TRADER, EnteringTrader)`
+
+Exemplo: trader JOAO com faixa EQUITY especial, sem config BMF especial, Entity MESA_A configurada -> EQUITY cobrado como (TRADER, JOAO); BMF cobrado dentro de (ENTITY, MESA_A).
+
+---
+
+## Contratos Especiais (Trader/Entity + Broker)
+
+Regras especiais na **mesma tabela**, campos `Trader` + `KeyType` nullable:
+| Broker | Trader | KeyType | Tipo |
+|--------|--------|---------|------|
+| 123 | NULL | NULL | Regra **padrao** |
+| 123 | "JOAO" | TRADER | Regra **especial** do trader JOAO (100% custom, ignora padrao) |
+| 123 | "MESA_A" | ENTITY | Regra **especial** da entity MESA_A |
+
+- CHECK no banco: `Trader` NULL <=> `KeyType` NULL
+- A regra casa com a BillingKey por (KeyType, Trader): regra ENTITY "JOAO" nao vale para o trader JOAO e vice-versa
+- API: `KeyType` obrigatorio quando `Trader` e informado (`BillingKeyTypes.NormalizeRuleKey`)
 
 Busca SEM fallback: se achou especial, usa so ela. Se nao, usa padrao.
 Regra especial e completamente independente (nao herda da padrao).
 
-**Copy-to-Trader**: copia regra padrao como base para criar regra especial.
+**Copy-to-Trader**: copia regra padrao como base para criar regra especial (`KeyType` no body, padrao TRADER).
 - EQUITY: requer que existam brackets padrao (Trader IS NULL) para o broker
 - BMF: requer que exista config padrao (Trader IS NULL) para o broker
 
@@ -166,6 +220,7 @@ Para ativos cujo preco cotado representa um lote (ex: AZUL54 = preco de 10.000 a
 - `notional = qty * (price / factor)` em vez de `qty * price`
 - Factor deve ser > 0 (validacao no controller, previne divisao por zero)
 - Se factor cadastrado = 0 no calculo: ignorado (fallback para notional padrao)
+- Lookup por Symbol case-insensitive. Dois fatores vigentes no dia para o mesmo Symbol: vale o de ValidFrom mais recente (`BillingProcessingService.BuildPriceFactorMap`)
 - Cadastro por simbolo com ValidFrom/ValidTo
 - Soft delete via IsActive (DELETE desativa, nao remove)
 - Aplicado automaticamente no calculo EQUITY (nao afeta BMF)
@@ -176,16 +231,18 @@ Para ativos cujo preco cotado representa um lote (ex: AZUL54 = preco de 10.000 a
 
 Agrupa ordens por Entity ao inves de Trader:
 - Config: Broker + Entity + ValidFrom/ValidTo
-- Resolucao: se Entity da ordem esta nas configs -> BillingKey = Entity **com a grafia da config**, senao -> BillingKey = EnteringTrader
+- Resolucao: se Entity da ordem esta nas configs -> BillingKey = (ENTITY, Entity **com a grafia da config**), senao -> (TRADER, EnteringTrader). Excecao: trader com regra especial propria sai da entity (ver BillingKey)
 - Case insensitive (OrdinalIgnoreCase) em toda a cadeia: resolucao, agrupamento (BillingKey e AssetClass), acumulados do mes e piso
-- FloorFee (opcional): piso mensal por entity. Se o fee do mes da entity < piso, cobra a diferenca como ajuste. Calculado por `FloorFeeCalculator` (fonte unica para PDF e relatorio mensal). Duas configs da mesma entity no mes: vale a de ValidFrom mais recente
+- FloorFee (opcional): piso mensal por entity. Se o fee do mes da entity < piso, cobra a diferenca como ajuste. Calculado por `FloorFeeCalculator` (fonte unica para PDF e relatorio mensal), somando **so chaves ENTITY**. Duas configs da mesma entity no mes: vale a de ValidFrom mais recente
+- Entity comecando no meio do mes: cenario nao existe no negocio (acumulados nao sao transferidos do trader para a entity)
 - Se nao ha configs para o broker: todas ordens usam EnteringTrader (nem verifica Entity)
 - Soft delete via IsActive
 
 Exemplo: Config MESA_A para Broker 1
-- JOAO(MESA_A) -> BillingKey = "MESA_A"
-- MARIA(MESA_A) -> BillingKey = "MESA_A" (agrupada)
-- PEDRO(MESA_B) -> BillingKey = "PEDRO" (padrao)
+- JOAO(MESA_A) -> BillingKey = (ENTITY, "MESA_A")
+- MARIA(MESA_A) -> BillingKey = (ENTITY, "MESA_A") (agrupada)
+- PEDRO(MESA_B) -> BillingKey = (TRADER, "PEDRO") (padrao)
+- PDF mensal mostra chaves ENTITY como "MESA_A (Entidade)"
 
 ---
 
@@ -203,7 +260,7 @@ Apos calcular o fee total do dia, distribui proporcionalmente entre as ordens:
 
 Valor fixo cobrado mensalmente por broker, independente de volume operado.
 - Config: Broker + Description + Amount + ValidFrom/ValidTo
-- Validade por mes: fee incluso se `ValidFrom <= ultimo dia do mes` E `ValidTo >= primeiro dia do mes`
+- Validade por mes: fee incluso se `ValidFrom <= ultimo dia do mes` E `ValidTo >= primeiro dia do mes` (ValidTo inclusivo)
 - Aparece no PDF mensal como secao separada ("COBRANCAS FIXAS MENSAIS") entre resumo e detalhamento
 - TOTAL GERAL do PDF = fee variavel (EQUITY+BMF) + fee fixo + ajuste de piso (FloorFee) + Market Data
 - Soft delete via IsActive
@@ -278,6 +335,7 @@ ExecuteAsync (loop 1s, retry 5s em erro)
 
 ### Regras comuns
 - `ValidFrom` deve ser estritamente anterior a `ValidTo` (nao permite igual)
+- **`ValidTo` e inclusivo em todo o sistema**: config vale no dia `ValidTo` (diario: `@TradeDate <= ValidTo`; mensal: `ValidTo >= primeiro dia do mes`). Frontend rotula "Valido Ate (inclusive)"
 - `Broker` deve ser > 0
 - Soft delete em todos os DELETEs
 

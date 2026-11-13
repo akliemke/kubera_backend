@@ -409,4 +409,18 @@ public class BmfCalculationStrategyTests
         Assert.Equal(0.21m, result.TotalFee);
         Assert.Equal(0.21m, result.OrderFees.Sum(o => o.FeeAmount));
     }
+
+    [Fact]
+    public void Calculate_FractionalCents_TotalFeeRoundedAndEqualsSumOfOrders()
+    {
+        // 10 mini * 0,0333 = 0,333 -> 0,33
+        var config = CreateDefaultConfig();
+        config.ValorMini = 0.0333m;
+        var orders = new List<Order> { CreateBmfOrder("WINZ24", 7), CreateBmfOrder("WDOZ24", 3) };
+
+        var result = BmfCalculationStrategy.Calculate(orders, config, 0, orders[0].TradeDate);
+
+        Assert.Equal(0.33m, result.TotalFee);
+        Assert.Equal(result.TotalFee, result.OrderFees.Sum(o => o.FeeAmount));
+    }
 }

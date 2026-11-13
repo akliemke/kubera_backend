@@ -95,10 +95,11 @@ public class BmfCalculationStrategy : ICalculationStrategy
             calculatedFee += qty * feePerContract;
         }
 
-        // Aplicar CAP mensal (NULL = sem teto)
+        // Aplicar CAP mensal (NULL = sem teto). Fee cobrado em centavos: Σ ordens = fee do dia
+        var roundedFee = Math.Round(calculatedFee, 2, MidpointRounding.AwayFromZero);
         var totalFee = config.CapMensal is { } cap
-            ? Math.Min(calculatedFee, Math.Max(0, cap - feeChargedInMonth))
-            : calculatedFee;
+            ? Math.Min(roundedFee, Math.Max(0, cap - feeChargedInMonth))
+            : roundedFee;
 
         // Distribuir fee proporcionalmente entre as ordens
         var orderFees = DistributeFeeProportionally(orders, totalFee);

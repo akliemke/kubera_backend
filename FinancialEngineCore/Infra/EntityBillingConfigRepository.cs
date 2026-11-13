@@ -20,7 +20,7 @@ public class EntityBillingConfigRepository
             WHERE Broker = @Broker
               AND IsActive = TRUE
               AND @TradeDate >= ValidFrom
-              AND @TradeDate < ValidTo
+              AND @TradeDate <= ValidTo
             ORDER BY Entity";
 
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);

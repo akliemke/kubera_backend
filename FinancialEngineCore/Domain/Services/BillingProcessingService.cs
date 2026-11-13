@@ -3,6 +3,7 @@ using FinancialEngineCore.Infra;
 using FinancialEngineCore.Model;
 using Microsoft.Extensions.Logging;
 using Npgsql;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 
 namespace FinancialEngineCore.Domain.Services;
@@ -69,9 +70,12 @@ public class BillingProcessingService : IBillingProcessingService
             CancellationToken = ct
         };
 
+        // Symbol -> Asset map is per day for all brokers: load once per date for the whole job
+        var symbolAssets = new ConcurrentDictionary<DateOnly, Lazy<Task<IReadOnlyDictionary<string, string>>>>();
+
         await Parallel.ForEachAsync(brokerIds, options, async (brokerId, token) =>
         {
-            await ProcessBrokerAsync(brokerId, billing.ProcessDate, billing.ProcessId, token);
+            await ProcessBrokerAsync(brokerId, billing.ProcessDate, billing.ProcessId, symbolAssets, token);
         });
 
         _logger.LogInformation("Completed billing {ProcessId}", billing.ProcessId);
@@ -83,7 +87,15 @@ public class BillingProcessingService : IBillingProcessingService
     /// Everything runs in a single transaction under a per-broker advisory lock.
     /// At the end, the broker's monthly Market Data charge is recalculated (added automatically).
     /// </summary>
-    public async Task ProcessBrokerAsync(int brokerId, DateOnly tradeDate, int processBillingId, CancellationToken ct)
+    public Task ProcessBrokerAsync(int brokerId, DateOnly tradeDate, int processBillingId, CancellationToken ct)
+        => ProcessBrokerAsync(brokerId, tradeDate, processBillingId, new(), ct);
+
+    private async Task ProcessBrokerAsync(
+        int brokerId,
+        DateOnly tradeDate,
+        int processBillingId,
+        ConcurrentDictionary<DateOnly, Lazy<Task<IReadOnlyDictionary<string, string>>>> symbolAssets,
+        CancellationToken ct)
     {
         _logger.LogDebug("Processing broker {BrokerId} for date {Date}", brokerId, tradeDate);
 
@@ -109,9 +121,9 @@ public class BillingProcessingService : IBillingProcessingService
                     brokerId, tradeDate, string.Join(", ", laterDates));
             }
 
-            await ProcessDateAsync(brokerId, tradeDate, processBillingId, conn, txn, ct);
+            await ProcessDateAsync(brokerId, tradeDate, processBillingId, symbolAssets, conn, txn, ct);
             foreach (var date in laterDates)
-                await ProcessDateAsync(brokerId, date, processBillingId, conn, txn, ct);
+                await ProcessDateAsync(brokerId, date, processBillingId, symbolAssets, conn, txn, ct);
 
             // Market Data is monthly: recalculated at the end of the broker's billing
             await _marketDataService.RecalculateBrokerMonthAsync(brokerId, tradeDate.Year, tradeDate.Month, conn, txn, ct);
@@ -129,6 +141,7 @@ public class BillingProcessingService : IBillingProcessingService
         int brokerId,
         DateOnly tradeDate,
         int processBillingId,
+        ConcurrentDictionary<DateOnly, Lazy<Task<IReadOnlyDictionary<string, string>>>> symbolAssets,
         NpgsqlConnection conn,
         NpgsqlTransaction txn,
         CancellationToken ct)
@@ -137,7 +150,7 @@ public class BillingProcessingService : IBillingProcessingService
 
         // Orders and configs use their own connections (in parallel); month accumulations
         // must be read inside the transaction to see days rewritten earlier in the cascade
-        var ordersTask = _orderRepository.GetOrdersByBrokerAsync(tradeDate, brokerId, ct);
+        var ordersTask = LoadOrdersAsync(brokerId, tradeDate, symbolAssets, ct);
         var entityConfigsTask = _entityBillingConfigRepository.GetByBrokerAndDateAsync(brokerId, tradeDate, ct);
         var bracketsTask = _bracketRepository.GetAllByBrokerAndDateAsync(brokerId, tradeDate, ct);
         var bmfConfigsTask = _bmfConfigRepository.GetAllByBrokerAndDateAsync(brokerId, tradeDate, ct);
@@ -167,7 +180,7 @@ public class BillingProcessingService : IBillingProcessingService
             await bmfConfigsTask,
             monthSummary,
             feePerBracket,
-            (await priceFactorsTask).ToDictionary(f => f.Symbol, f => f.Factor));
+            BuildPriceFactorMap(await priceFactorsTask));
 
         // Resolve billing key: entity-based or trader-based (canonical casing)
         var entityKeyMap = BuildEntityKeyMap((await entityConfigsTask).Select(c => c.Entity));
@@ -292,6 +305,34 @@ public class BillingProcessingService : IBillingProcessingService
         _logger.LogDebug(
             "Persisted {DailyCount} daily billings, {OrderCount} order billings, {BracketCount} bracket trackings",
             dailyBillings.Count, orderBillings.Count, bracketTrackings.Count);
+    }
+
+    private async Task<List<Order>> LoadOrdersAsync(
+        int brokerId,
+        DateOnly tradeDate,
+        ConcurrentDictionary<DateOnly, Lazy<Task<IReadOnlyDictionary<string, string>>>> symbolAssets,
+        CancellationToken ct)
+    {
+        // CancellationToken.None: the shared load must not be cancelled by a single broker
+        var map = await symbolAssets.GetOrAdd(tradeDate, date =>
+            new Lazy<Task<IReadOnlyDictionary<string, string>>>(
+                () => _orderRepository.GetSymbolAssetsAsync(date, CancellationToken.None))).Value;
+
+        return await _orderRepository.GetOrdersByBrokerAsync(tradeDate, brokerId, ct, map);
+    }
+
+    /// <summary>
+    /// Case-insensitive map from symbol to price factor. Overlapping validities for the same symbol:
+    /// the most recent ValidFrom wins (instead of failing the whole broker on a duplicate key).
+    /// </summary>
+    internal static IReadOnlyDictionary<string, decimal> BuildPriceFactorMap(IEnumerable<PriceModificationFactor> factors)
+    {
+        return factors
+            .GroupBy(f => f.Symbol.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderByDescending(f => f.ValidFrom).ThenByDescending(f => f.Id).First().Factor,
+                StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>

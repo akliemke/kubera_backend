@@ -771,7 +771,7 @@ public class BillingIntegrationTests : IAsyncLifetime
         var bmfConfigRepo = new BmfFeeConfigRepository(dbFactory);
         var priceFactorRepo = new PriceModificationFactorRepository(dbFactory);
 
-        var equityStrategy = new EquityCalculationStrategy();
+        var equityStrategy = new EquityCalculationStrategy(NullLogger<EquityCalculationStrategy>.Instance);
         var bmfStrategy = new BmfCalculationStrategy(NullLogger<BmfCalculationStrategy>.Instance);
         var registry = new CalculationStrategyRegistry(new ICalculationStrategy[] { equityStrategy, bmfStrategy });
 

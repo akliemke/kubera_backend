@@ -1,4 +1,5 @@
 using FinancialEngineCore.Model;
+using Microsoft.Extensions.Logging;
 
 namespace FinancialEngineCore.Domain.Strategies;
 
@@ -8,7 +9,14 @@ namespace FinancialEngineCore.Domain.Strategies;
 /// </summary>
 public class EquityCalculationStrategy : ICalculationStrategy
 {
+    private readonly ILogger<EquityCalculationStrategy> _logger;
+
     public string AssetClass => AssetClasses.Equity;
+
+    public EquityCalculationStrategy(ILogger<EquityCalculationStrategy> logger)
+    {
+        _logger = logger;
+    }
 
     public BillingCalculationResult Calculate(
         int brokerId,
@@ -36,9 +44,18 @@ public class EquityCalculationStrategy : ICalculationStrategy
             };
         }
 
+        var brackets = context.GetEquityBrackets(billingKey);
+
+        if (brackets.Count == 0)
+        {
+            _logger.LogWarning(
+                "No EQUITY brackets found for broker {BrokerId}, billing key {BillingKey} on {Date}: charged as zero",
+                brokerId, billingKey, tradeDate);
+        }
+
         return Calculate(
             orders,
-            context.GetEquityBrackets(billingKey),
+            brackets,
             context.GetEquityAccumulated(billingKey),
             context.GetFeePerBracket(billingKey),
             context.PriceFactors,
@@ -149,11 +166,13 @@ public class EquityCalculationStrategy : ICalculationStrategy
             var bpsRate = bracket.Bps / 10000m; // Converter BPS para taxa decimal
             var calculatedFee = notionalInBracket * bpsRate;
 
-            // Aplicar CAP da faixa (NULL = sem teto)
+            // Aplicar CAP da faixa (NULL = sem teto). Fee cobrado em centavos: Σ ordens = fee do dia
+            // e o acumulado usado no CAP é o que foi efetivamente cobrado
             var feeAlreadyCharged = feeChargedPerBracket.GetValueOrDefault(bracket.NotionalFrom, 0);
+            var roundedFee = Math.Round(calculatedFee, 2, MidpointRounding.AwayFromZero);
             var feeToCharge = bracket.Cap is { } cap
-                ? Math.Min(calculatedFee, Math.Max(0, cap - feeAlreadyCharged))
-                : calculatedFee;
+                ? Math.Min(roundedFee, Math.Max(0, cap - feeAlreadyCharged))
+                : roundedFee;
 
             // Registrar breakdown da faixa
             bracketFees.Add(new BracketFeeResult

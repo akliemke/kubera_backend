@@ -499,4 +499,34 @@ public class EquityCalculationStrategyTests
 
         Assert.Equal(Math.Round(result.TotalFee, 2), result.OrderFees.Sum(o => o.FeeAmount));
     }
+
+    [Fact]
+    public void Calculate_FractionalCents_ChargedFeeRoundedAndEqualsSumOfOrders()
+    {
+        // 1.234.567 * 0,00005 = 61,72835 -> 61,73
+        var orders = new List<Order>
+        {
+            CreateOrder(1_000, 1_234.567m),
+        };
+        var brackets = CreateDefaultBrackets();
+
+        var result = EquityCalculationStrategy.Calculate(orders, brackets, 0, new Dictionary<decimal, decimal>(), NoPriceFactors);
+
+        Assert.Equal(61.73m, result.TotalFee);
+        Assert.Equal(61.73m, result.BracketFees.Single().ChargedFee);
+        Assert.Equal(61.72835m, result.BracketFees.Single().CalculatedFee);
+        Assert.Equal(result.TotalFee, result.OrderFees.Sum(o => o.FeeAmount));
+    }
+
+    [Fact]
+    public void Calculate_RoundedFeeAboveRemainingCap_ChargesOnlyRemaining()
+    {
+        // Faixa 1 ja cobrou 2099,99 (CAP 2100): 61,73 calculado -> cobra so 0,01
+        var orders = new List<Order> { CreateOrder(1_000, 1_234.567m) };
+        var feePerBracket = new Dictionary<decimal, decimal> { [0] = 2_099.99m };
+
+        var result = EquityCalculationStrategy.Calculate(orders, CreateDefaultBrackets(), 40_000_000, feePerBracket, NoPriceFactors);
+
+        Assert.Equal(0.01m, result.TotalFee);
+    }
 }

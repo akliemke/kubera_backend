@@ -93,7 +93,7 @@ public class BmfFeeConfigRepository
             WHERE Broker = @BrokerId
               AND IsActive = TRUE
               AND @TradeDate >= ValidFrom
-              AND @TradeDate < ValidTo
+              AND @TradeDate <= ValidTo
             ORDER BY Trader NULLS LAST";
 
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);

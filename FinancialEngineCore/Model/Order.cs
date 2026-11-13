@@ -19,10 +19,13 @@ public class Order
 
     /// <summary>
     /// Raiz do ativo (ex: PETR, WIN, DI1). Identifica a classe e o tipo de contrato BMF.
-    /// Não existe em history.orders: a view traz do trade da ordem (null se a ordem não tem trade).
-    /// Em sintético a view devolve uma linha por perna com Asset = perna (ex: WDO, DOL).
+    /// Não existe em history.orders: vem do mapa Symbol → Asset dos trades do dia (null se o Symbol não teve trade).
+    /// Em sintético o <c>BillableOrderBuilder</c> devolve uma linha por perna com Asset = perna (ex: WDO, DOL).
     /// </summary>
     public string? Asset { get; set; }
+
+    /// <summary>Validade da ordem (DAY, GTC, GTD...). GTC/GTD usam os trades do dia (CumQty é cumulativo)</summary>
+    public string? TimeInForce { get; set; }
 
     /// <summary>
     /// Classe do ativo: "EQUITY", "BMF" ou "UNKNOWN". Não vem do banco:

@@ -10,7 +10,7 @@
 Sistema de cobranca financeira sobre operacoes de bolsa. Ordens vem de sistema externo, Kubera calcula fees por (BillingKey, Broker, Dia, AssetClass).
 
 ## Entidades Principais
-- **Order** — operacao de bolsa (qty, price, symbol, assetClass, trader, entity, exchangeSymbol)
+- **Order** — operacao de bolsa (qty, price, symbol, trader, entity; asset (raiz) vem dos trades via view). AssetClass deduzida no codigo por `AssetClassifier`; sinteticos (BTGDOLZ26) quebrados por perna na view
 - **EquityFeeBracket** — faixas EQUITY progressivas (Broker, Trader?, NotionalFrom/To, Bps, Cap, ValidFrom/To)
 - **BmfFeeConfig** — config BMF por contrato (Broker, Trader?, Mini, Cheio, DI1 por vencimento, CapMensal)
 - **PriceModificationFactor** — ajuste de preco por ativo (Symbol, Factor) para EQUITY
@@ -21,7 +21,7 @@ Sistema de cobranca financeira sobre operacoes de bolsa. Ordens vem de sistema e
 
 ## Regras Core
 - **EQUITY**: cobranca progressiva por faixas de notional, com BPS + CAP por faixa, acumulado mensal
-- **BMF**: cobranca por qtd de contratos (Mini/Cheio/DI1), CAP mensal unico
+- **BMF**: cobranca por qtd de contratos (Mini/Cheio/DI1 por vencimento/Demais = ValorOutros), CAP mensal unico
 - **BillingKey**: Entity (se EntityBillingConfig) ou EnteringTrader (padrao)
 - **Trader nullable**: NULL = regra padrao, preenchido = 100% custom (sem fallback)
 - **Validade**: todas as configs tem ValidFrom/ValidTo
@@ -63,7 +63,7 @@ FinancialEngineCore.Tests/
   Integration/
     DatabaseFixture.cs              (Testcontainers PostgreSQL)
     BillingIntegrationTests.cs      (7 testes e2e)
-    init.sql                        (schema completo)
+    init.sql -> link p/ kubera_webapp/Scripts/schema.sql (script unico)
 ```
 
 ## Frontend (repo separado: C:\Projetos\outros\kubera\kubera\)

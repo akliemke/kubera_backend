@@ -20,7 +20,7 @@ public class PriceModificationFactorRepository
             WHERE Symbol = @Symbol
               AND IsActive = TRUE
               AND @TradeDate >= ValidFrom
-              AND @TradeDate < ValidTo
+              AND @TradeDate <= ValidTo
             LIMIT 1";
 
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
@@ -35,7 +35,7 @@ public class PriceModificationFactorRepository
             SELECT * FROM financial_engine.price_modification_factors
             WHERE IsActive = TRUE
               AND @TradeDate >= ValidFrom
-              AND @TradeDate < ValidTo
+              AND @TradeDate <= ValidTo
             ORDER BY Symbol";
 
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
