@@ -22,15 +22,15 @@ public class EquityCalculationStrategyTests
     {
         return new Order
         {
-            Id = 1,
+            OrderId = "1",
             CumQty = qty,
             AvgPx = price,
             Symbol = symbol,
             AssetClass = "EQUITY",
             EnteringTrader = trader,
-            EnteringFirm = "1",
+            ExecBroker = "1",
             Entity = "MESA1",
-            OmsInstance = "OMS1",
+            Instance = "OMS1",
             Side = "BUY",
             TradeDate = DateOnly.FromDateTime(DateTime.Today)
         };

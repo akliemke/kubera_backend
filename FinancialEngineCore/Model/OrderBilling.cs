@@ -9,7 +9,7 @@ public class OrderBilling
     public long Id { get; set; }
 
     /// <summary>ID da ordem original</summary>
-    public long OrderId { get; set; }
+    public required string OrderId { get; set; }
 
     /// <summary>Raiz do ativo. Sintético gera uma linha por perna (mesmo OrderId, Asset WDO/DOL)</summary>
     public string? Asset { get; set; }

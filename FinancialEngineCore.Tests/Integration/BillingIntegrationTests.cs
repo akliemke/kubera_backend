@@ -390,7 +390,7 @@ public class BillingIntegrationTests : IAsyncLifetime
         await using (var conn = new NpgsqlConnection(_db.ConnectionString))
         {
             await conn.OpenAsync();
-            await conn.ExecuteAsync("DELETE FROM history.orders");
+            await conn.ExecuteAsync("DELETE FROM history.orders_new");
         }
 
         await service.ProcessBrokerAsync(BrokerId, _tradeDate, ProcessBillingId, CancellationToken.None);
@@ -567,11 +567,11 @@ public class BillingIntegrationTests : IAsyncLifetime
         await using var conn = new NpgsqlConnection(_db.ConnectionString);
         await conn.OpenAsync();
         Assert.Equal(0, await conn.ExecuteScalarAsync<int>(
-            "SELECT COUNT(*) FROM financial_engine.order_billing WHERE OrderId = 3"));
+            "SELECT COUNT(*) FROM financial_engine.order_billing WHERE OrderId = '3'"));
     }
 
     // ==========================================
-    // Synthetic (BTGDOL = DOL + WDO): the view returns one row per leg, LastQty in cheio units
+    // Synthetic (BTGDOL = DOL + WDO): the view returns one row per leg, Qty in cheio units
     // ==========================================
     [Fact]
     public async Task Sintetico_ViewQuebraPorPerna_CobraMiniECheio()
@@ -594,7 +594,7 @@ public class BillingIntegrationTests : IAsyncLifetime
 
         var legs = (await GetOrderBillings(billing.Id)).OrderBy(o => o.Asset).ToList();
         Assert.Equal(new[] { "DOL", "WDO" }, legs.Select(o => o.Asset));
-        Assert.All(legs, o => Assert.Equal(1, o.OrderId));
+        Assert.All(legs, o => Assert.Equal("1", o.OrderId));
         Assert.Equal(new[] { 2m, 10m }, legs.Select(o => o.Qty));
 
         // Report detail: one line per leg, not duplicated by the view join
@@ -850,7 +850,7 @@ public class BillingIntegrationTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// history.orders has no Asset (only trades do). For non-GTC orders with an asset, also seeds one
+    /// history.orders_new has no Asset (only trades do). For non-GTC orders with an asset, also seeds one
     /// execution trade (CumQty @ AvgPx) carrying it; asset null = order without trades (or trades seeded apart).
     /// GTC/GTD orders take their trades (and Asset) from explicit SeedTrade calls.
     /// </summary>
@@ -861,22 +861,21 @@ public class BillingIntegrationTests : IAsyncLifetime
         await using var conn = new NpgsqlConnection(_db.ConnectionString);
         await conn.OpenAsync();
         await conn.ExecuteAsync(@"
-            INSERT INTO history.orders
-                (Id, CumQty, AvgPx, Symbol, EnteringTrader,
-                 Entity, TradeDate, EnteringFirm, OmsInstance, Side, businessDate, TimeInForce)
-            VALUES (@Id, @CumQty, @AvgPx, @Symbol, @EnteringTrader,
-                    @Entity, @TradeDate, @EnteringFirm, 'OMS1', 'BUY', @BusinessDate, @TimeInForce)",
+            INSERT INTO history.orders_new
+                (OrderId, CumQty, AvgPx, Symbol, EnteringTrader,
+                 Entity, TradeDate, ExecBroker, Instance, Side, TimeInForce)
+            VALUES (@OrderId, @CumQty, @AvgPx, @Symbol, @EnteringTrader,
+                    @Entity, @TradeDate, @ExecBroker, 'OMS1', 'BUY', @TimeInForce)",
             new
             {
-                Id = id,
+                OrderId = id.ToString(),
                 CumQty = qty,
                 AvgPx = price,
                 Symbol = symbol,
                 EnteringTrader = trader,
                 Entity = entity,
                 TradeDate = date,
-                EnteringFirm = BrokerId.ToString(),
-                BusinessDate = date.ToString("yyyy-MM-dd"),
+                ExecBroker = BrokerId.ToString(),
                 TimeInForce = timeInForce
             });
 
@@ -956,24 +955,23 @@ public class BillingIntegrationTests : IAsyncLifetime
         await using var conn = new NpgsqlConnection(_db.ConnectionString);
         await conn.OpenAsync();
         await conn.ExecuteAsync(@"
-            INSERT INTO history.trades
-                (OrderId, LastQty, LastPx, UniqueTradeId, Symbol, Asset, EnteringTrader,
-                 Entity, TradeDate, EnteringFirm, OmsInstance, Side, businessDate)
-            VALUES (@OrderId, @LastQty, @LastPx, @UniqueTradeId, @Symbol, @Asset, @EnteringTrader,
-                    @Entity, @TradeDate, @EnteringFirm, 'OMS1', 'BUY', @BusinessDate)",
+            INSERT INTO history.trades_new
+                (OrderId, Qty, Price, UniqueTradeId, Symbol, Asset, EnteringTrader,
+                 EntityId, TradeDate, ExecBroker, Instance, Side)
+            VALUES (@OrderId, @Qty, @Price, @UniqueTradeId, @Symbol, @Asset, @EnteringTrader,
+                    @Entity, @TradeDate, @ExecBroker, 'OMS1', 'BUY')",
             new
             {
-                OrderId = orderId,
-                LastQty = lastQty,
-                LastPx = lastPx,
+                OrderId = orderId.ToString(),
+                Qty = lastQty,
+                Price = lastPx,
                 UniqueTradeId = uniqueTradeId,
                 Symbol = symbol,
                 Asset = asset,
                 EnteringTrader = trader,
                 Entity = entity,
                 TradeDate = date,
-                EnteringFirm = BrokerId.ToString(),
-                BusinessDate = date.ToString("yyyy-MM-dd")
+                ExecBroker = BrokerId.ToString()
             });
     }
 

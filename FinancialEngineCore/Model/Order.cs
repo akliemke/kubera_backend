@@ -5,8 +5,8 @@ namespace FinancialEngineCore.Model;
 /// </summary>
 public class Order
 {
-    /// <summary>ID da ordem no sistema externo</summary>
-    public long Id { get; set; }
+    /// <summary>ID da ordem no sistema externo (GUID hoje; string para aceitar outros formatos)</summary>
+    public required string OrderId { get; set; }
 
     /// <summary>Quantidade executada</summary>
     public decimal CumQty { get; set; }
@@ -19,7 +19,7 @@ public class Order
 
     /// <summary>
     /// Raiz do ativo (ex: PETR, WIN, DI1). Identifica a classe e o tipo de contrato BMF.
-    /// Não existe em history.orders: vem do mapa Symbol → Asset dos trades do dia (null se o Symbol não teve trade).
+    /// Não existe em history.orders_new: vem do mapa Symbol → Asset dos trades do dia (null se o Symbol não teve trade).
     /// Em sintético o <c>BillableOrderBuilder</c> devolve uma linha por perna com Asset = perna (ex: WDO, DOL).
     /// </summary>
     public string? Asset { get; set; }
@@ -43,10 +43,10 @@ public class Order
     public DateOnly TradeDate { get; set; }
 
     /// <summary>Código do broker (corretora)</summary>
-    public required string EnteringFirm { get; set; }
+    public required string ExecBroker { get; set; }
 
     /// <summary>Instância do OMS de origem</summary>
-    public required string OmsInstance { get; set; }
+    public required string Instance { get; set; }
 
     /// <summary>Lado da operação (BUY/SELL)</summary>
     public required string Side { get; set; }

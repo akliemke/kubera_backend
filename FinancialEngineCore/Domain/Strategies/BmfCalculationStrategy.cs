@@ -75,7 +75,7 @@ public class BmfCalculationStrategy : ICalculationStrategy
         int? brokerId = null)
     {
         var key = billingKey ?? BillingKey.Trader(orders[0].EnteringTrader);
-        var broker = brokerId ?? int.Parse(orders[0].EnteringFirm);
+        var broker = brokerId ?? int.Parse(orders[0].ExecBroker);
 
         // Calcular quantidade total e fee por tipo de contrato
         decimal totalQty = 0;
@@ -263,7 +263,7 @@ public class BmfCalculationStrategy : ICalculationStrategy
 
         return orders.Select((o, i) => new OrderFeeResult
         {
-            OrderId = o.Id,
+            OrderId = o.OrderId,
             Asset = o.Asset,
             Notional = 0,
             Qty = o.CumQty,
@@ -293,7 +293,7 @@ public class BmfCalculationStrategy : ICalculationStrategy
             ConfigId = null,
             OrderFees = orders.Select(o => new OrderFeeResult
             {
-                OrderId = o.Id,
+                OrderId = o.OrderId,
                 Asset = o.Asset,
                 Notional = 0,
                 Qty = o.CumQty,

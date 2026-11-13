@@ -81,7 +81,7 @@ public class EquityCalculationStrategy : ICalculationStrategy
         int? brokerId = null)
     {
         var key = billingKey ?? BillingKey.Trader(orders[0].EnteringTrader);
-        var broker = brokerId ?? int.Parse(orders[0].EnteringFirm);
+        var broker = brokerId ?? int.Parse(orders[0].ExecBroker);
         var tradeDate = orders[0].TradeDate;
 
         // Calcular notional total do dia (com ajuste de fator de preço)
@@ -206,7 +206,7 @@ public class EquityCalculationStrategy : ICalculationStrategy
 
         return orders.Select((o, i) => new OrderFeeResult
         {
-            OrderId = o.Id,
+            OrderId = o.OrderId,
             Asset = o.Asset,
             Notional = notionals[i],
             Qty = 0,

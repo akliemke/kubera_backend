@@ -5,7 +5,7 @@ namespace FinancialEngineCore.Model;
 /// </summary>
 public class OrderBillingDetail
 {
-    public long OrderId { get; set; }
+    public required string OrderId { get; set; }
     public int Broker { get; set; }
     public required string Trader { get; set; }
     /// <summary>Tipo da chave: TRADER (Trader = EnteringTrader) ou ENTITY (Trader = Entity)</summary>

@@ -11,15 +11,15 @@ public class BillingKeyResolutionTests
     {
         return new Order
         {
-            Id = 1,
+            OrderId = "1",
             CumQty = 100,
             AvgPx = 100,
             Symbol = "PETR4",
             AssetClass = assetClass,
             EnteringTrader = trader,
             Entity = entity,
-            EnteringFirm = "1",
-            OmsInstance = "OMS1",
+            ExecBroker = "1",
+            Instance = "OMS1",
             Side = "BUY",
             TradeDate = DateOnly.FromDateTime(DateTime.Today)
         };

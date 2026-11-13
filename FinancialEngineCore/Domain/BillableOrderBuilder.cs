@@ -3,15 +3,15 @@ using FinancialEngineCore.Model;
 namespace FinancialEngineCore.Domain;
 
 /// <summary>Trade do dia de uma ordem (só o necessário para GTC/GTD e sintéticos).</summary>
-public record DayTrade(long OrderId, decimal LastQty, decimal LastPx, string? UniqueTradeId);
+public record DayTrade(string OrderId, decimal Qty, decimal Price, string? UniqueTradeId);
 
 /// <summary>
-/// Monta as ordens cobráveis do dia a partir de history.orders, do mapa Symbol → Asset do dia e dos trades
+/// Monta as ordens cobráveis do dia a partir de history.orders_new, do mapa Symbol → Asset do dia e dos trades
 /// do dia das ordens que precisam deles:
 /// - Normal: passa direto, Asset do mapa (null se o Symbol não teve trade: o AssetClassifier deduz pelo Symbol)
-/// - GTC/GTD: CumQty é cumulativo entre dias, usa os trades do dia (Σ LastQty, VWAP). Sem trade no dia: não entra
+/// - GTC/GTD: CumQty é cumulativo entre dias, usa os trades do dia (Σ Qty, VWAP). Sem trade no dia: não entra
 /// - Sintético (Symbol não começa com o Asset, ex: BTGDOLZ26/DOL): uma linha por perna (sufixo do UniqueTradeId),
-///   LastQty no padrão do cheio convertido pelo fator da perna. Sem trade no dia: não entra
+///   Qty no padrão do cheio convertido pelo fator da perna. Sem trade no dia: não entra
 /// </summary>
 public static class BillableOrderBuilder
 {
@@ -54,7 +54,7 @@ public static class BillableOrderBuilder
 
             if (IsSynthetic(order, asset))
             {
-                foreach (var leg in tradesByOrder[order.Id].GroupBy(t => GetLeg(t.UniqueTradeId)))
+                foreach (var leg in tradesByOrder[order.OrderId].GroupBy(t => GetLeg(t.UniqueTradeId)))
                 {
                     var (qty, vwap) = Aggregate(leg);
                     result.Add(Copy(order, leg.Key, qty * LegFactors.GetValueOrDefault(leg.Key, 1), vwap));
@@ -62,7 +62,7 @@ public static class BillableOrderBuilder
             }
             else if (IsGoodTillOrder(order))
             {
-                var dayTrades = tradesByOrder[order.Id].ToList();
+                var dayTrades = tradesByOrder[order.OrderId].ToList();
                 if (dayTrades.Count == 0)
                     continue;
 
@@ -94,15 +94,15 @@ public static class BillableOrderBuilder
         decimal qty = 0, value = 0;
         foreach (var t in trades)
         {
-            qty += t.LastQty;
-            value += t.LastQty * t.LastPx;
+            qty += t.Qty;
+            value += t.Qty * t.Price;
         }
         return (qty, qty == 0 ? 0 : value / qty);
     }
 
     private static Order Copy(Order order, string? asset, decimal cumQty, decimal avgPx) => new()
     {
-        Id = order.Id,
+        OrderId = order.OrderId,
         CumQty = cumQty,
         AvgPx = avgPx,
         Symbol = order.Symbol,
@@ -110,8 +110,8 @@ public static class BillableOrderBuilder
         EnteringTrader = order.EnteringTrader,
         Entity = order.Entity,
         TradeDate = order.TradeDate,
-        EnteringFirm = order.EnteringFirm,
-        OmsInstance = order.OmsInstance,
+        ExecBroker = order.ExecBroker,
+        Instance = order.Instance,
         Side = order.Side,
         TimeInForce = order.TimeInForce
     };

@@ -57,8 +57,8 @@ public class DatabaseFixture : IAsyncLifetime
             TRUNCATE financial_engine.market_data_fee_configs RESTART IDENTITY CASCADE;
             TRUNCATE financial_engine.market_data_exclusions RESTART IDENTITY CASCADE;
             TRUNCATE financial_engine.user_exchange_account_snapshots;
-            TRUNCATE history.orders RESTART IDENTITY CASCADE;
-            TRUNCATE history.trades RESTART IDENTITY CASCADE;
+            TRUNCATE history.orders_new RESTART IDENTITY CASCADE;
+            TRUNCATE history.trades_new RESTART IDENTITY CASCADE;
             TRUNCATE financial_engine.brokers RESTART IDENTITY CASCADE;
         ");
     }

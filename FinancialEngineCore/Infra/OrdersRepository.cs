@@ -25,42 +25,41 @@ public class OrdersRepository
         IReadOnlyDictionary<string, string>? symbolAssets = null)
     {
         const string ordersSql = @"
-            SELECT Id, CumQty, AvgPx, Symbol, EnteringTrader, Entity, TradeDate, EnteringFirm,
-                   OmsInstance, Side, TimeInForce
-            FROM history.orders
-            WHERE businessDate = @BusinessDate
-              AND EnteringFirm = @BrokerId";
+            SELECT OrderId, CumQty, AvgPx, Symbol, EnteringTrader, Entity, TradeDate, ExecBroker,
+                   Instance, Side, TimeInForce
+            FROM history.orders_new
+            WHERE TradeDate = @TradeDate
+              AND ExecBroker = @BrokerId";
 
         const string tradesSql = @"
-            SELECT OrderId, LastQty, LastPx, UniqueTradeId
-            FROM history.trades
+            SELECT OrderId, Qty, Price, UniqueTradeId
+            FROM history.trades_new
             WHERE OrderId = ANY(@OrderIds)
-              AND businessDate = @BusinessDate";
+              AND TradeDate = @TradeDate";
 
-        var businessDate = tradeDate.ToString("yyyy-MM-dd");
         symbolAssets ??= await GetSymbolAssetsAsync(tradeDate, cancellationToken);
 
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
         var orders = (await conn.QueryAsync<Order>(ordersSql, new
         {
-            BusinessDate = businessDate,
+            TradeDate = tradeDate,
             BrokerId = brokerId.ToString()
         })).ToList();
 
         var orderIds = orders
             .Where(o => BillableOrderBuilder.NeedsTrades(o, symbolAssets))
-            .Select(o => o.Id)
+            .Select(o => o.OrderId)
             .ToArray();
 
         var trades = orderIds.Length == 0
             ? Enumerable.Empty<DayTrade>()
-            : await conn.QueryAsync<DayTrade>(tradesSql, new { OrderIds = orderIds, BusinessDate = businessDate });
+            : await conn.QueryAsync<DayTrade>(tradesSql, new { OrderIds = orderIds, TradeDate = tradeDate });
 
         return Classify(BillableOrderBuilder.Build(orders, symbolAssets, trades));
     }
 
     /// <summary>
-    /// Mapa Symbol → Asset (raiz) dos trades do dia, de todos os brokers (history.orders não tem Asset).
+    /// Mapa Symbol → Asset (raiz) dos trades do dia, de todos os brokers (history.orders_new não tem Asset).
     /// Mesmo Symbol com Assets diferentes: vale o do primeiro trade.
     /// </summary>
     public async Task<IReadOnlyDictionary<string, string>> GetSymbolAssetsAsync(
@@ -68,14 +67,14 @@ public class OrdersRepository
     {
         const string sql = @"
             SELECT DISTINCT ON (Symbol) Symbol, Asset
-            FROM history.trades
-            WHERE businessDate = @BusinessDate
+            FROM history.trades_new
+            WHERE TradeDate = @TradeDate
               AND Asset IS NOT NULL
             ORDER BY Symbol, Id";
 
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
         var rows = await conn.QueryAsync<(string Symbol, string Asset)>(
-            sql, new { BusinessDate = tradeDate.ToString("yyyy-MM-dd") });
+            sql, new { TradeDate = tradeDate });
 
         var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var (symbol, asset) in rows)
@@ -104,24 +103,24 @@ public class OrdersRepository
         CancellationToken cancellationToken)
     {
         const string sql = @"
-            SELECT DISTINCT o.businessDate
-            FROM history.orders o
-            WHERE o.EnteringFirm = @BrokerIdText
-              AND o.businessDate >= @MonthStart
-              AND o.businessDate < @BusinessDate
+            SELECT DISTINCT to_char(o.TradeDate, 'YYYY-MM-DD') AS TradeDate
+            FROM history.orders_new o
+            WHERE o.ExecBroker = @BrokerIdText
+              AND o.TradeDate >= @MonthStart
+              AND o.TradeDate < @TradeDate
               AND NOT EXISTS (
                   SELECT 1 FROM financial_engine.daily_billing db
                   WHERE db.Broker = @BrokerId
-                    AND db.TradeDate = o.businessDate::date)
-            ORDER BY o.businessDate";
+                    AND db.TradeDate = o.TradeDate)
+            ORDER BY 1";
 
         using var conn = await _dbConnectionFactory.CreateOpenConnectionAsync(cancellationToken);
         var dates = await conn.QueryAsync<string>(sql, new
         {
             BrokerIdText = brokerId.ToString(),
             BrokerId = brokerId,
-            MonthStart = new DateOnly(tradeDate.Year, tradeDate.Month, 1).ToString("yyyy-MM-dd"),
-            BusinessDate = tradeDate.ToString("yyyy-MM-dd")
+            MonthStart = new DateOnly(tradeDate.Year, tradeDate.Month, 1),
+            TradeDate = tradeDate
         });
         return dates.ToList();
     }

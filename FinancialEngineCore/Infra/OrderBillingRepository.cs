@@ -37,7 +37,7 @@ public class OrderBillingRepository
         foreach (var ob in orderBillings)
         {
             await writer.StartRowAsync(cancellationToken);
-            await writer.WriteAsync(ob.OrderId, NpgsqlDbType.Bigint, cancellationToken);
+            await writer.WriteAsync(ob.OrderId, NpgsqlDbType.Varchar, cancellationToken);
             if (ob.Asset is null)
                 await writer.WriteNullAsync(cancellationToken);
             else
@@ -102,8 +102,8 @@ public class OrderBillingRepository
                    ob.Notional, ob.Qty, ob.FeeAmount, ob.Asset,
                    o.Symbol, o.Side
             FROM financial_engine.order_billing ob
-            -- history.orders (1 linha por ordem), não a view: a view devolve 1 linha por perna do sintético
-            LEFT JOIN history.orders o ON o.Id = ob.OrderId
+            -- history.orders_new tem 1 linha por (ordem, dia): GTC/GTD repete o OrderId em vários dias
+            LEFT JOIN history.orders_new o ON o.OrderId = ob.OrderId AND o.TradeDate = ob.TradeDate
             WHERE ob.Broker = @BrokerId
               AND ob.TradeDate >= @MonthStart AND ob.TradeDate < @MonthEnd
             ORDER BY ob.Trader, ob.KeyType, ob.AssetClass, ob.TradeDate, ob.OrderId, ob.Asset";

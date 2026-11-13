@@ -32,16 +32,16 @@ public class BmfCalculationStrategyTests
     {
         return new Order
         {
-            Id = 1,
+            OrderId = "1",
             CumQty = qty,
             AvgPx = 0, // Not used for BMF
             Symbol = symbol,
             Asset = asset ?? (symbol.Length >= 3 ? symbol[..3] : symbol),
             AssetClass = AssetClasses.Bmf,
             EnteringTrader = trader,
-            EnteringFirm = "1",
+            ExecBroker = "1",
             Entity = "MESA1",
-            OmsInstance = "OMS1",
+            Instance = "OMS1",
             Side = "BUY",
             TradeDate = new DateOnly(2024, 11, 15) // November 2024
         };

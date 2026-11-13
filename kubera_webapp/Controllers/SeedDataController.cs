@@ -53,7 +53,6 @@ public static class SeedDataController
                 // 2. Clean existing data for this month
                 var firstDay = new DateOnly(year, month, 1);
                 var lastDay = firstDay.AddMonths(1).AddDays(-1);
-                var businessDatePrefix = $"{year}-{month:D2}";
 
                 await conn.ExecuteAsync(@"
                     DELETE FROM financial_engine.daily_billing
@@ -61,13 +60,14 @@ public static class SeedDataController
                     new { FirstDay = firstDay, LastDay = lastDay }, tx);
 
                 await conn.ExecuteAsync(@"
-                    DELETE FROM history.trades WHERE OrderId IN (
-                        SELECT Id FROM history.orders WHERE EnteringFirm = '935' AND businessDate LIKE @Prefix
-                    )", new { Prefix = businessDatePrefix + "%" }, tx);
+                    DELETE FROM history.trades_new
+                    WHERE ExecBroker = '935' AND TradeDate >= @FirstDay AND TradeDate <= @LastDay",
+                    new { FirstDay = firstDay, LastDay = lastDay }, tx);
 
                 await conn.ExecuteAsync(@"
-                    DELETE FROM history.orders WHERE EnteringFirm = '935' AND businessDate LIKE @Prefix",
-                    new { Prefix = businessDatePrefix + "%" }, tx);
+                    DELETE FROM history.orders_new
+                    WHERE ExecBroker = '935' AND TradeDate >= @FirstDay AND TradeDate <= @LastDay",
+                    new { FirstDay = firstDay, LastDay = lastDay }, tx);
 
                 // 3. Ensure fee configs exist (only insert if none active)
                 var bracketsCreated = 0;
@@ -114,7 +114,6 @@ public static class SeedDataController
                 for (int dayIdx = 0; dayIdx < tradingDays.Count; dayIdx++)
                 {
                     var day = tradingDays[dayIdx];
-                    var dateStr = day.ToString("yyyy-MM-dd");
 
                     // --- TRADER_A: 3-4 EQUITY orders per day (high volume) ---
                     var traderACount = 3 + (dayIdx % 2);
@@ -132,7 +131,7 @@ public static class SeedDataController
                             tif = "GTC";
 
                         var orderId = await InsertOrderAsync(conn, tx, qty, price, symbol, symbol[..4],
-                            "TRADER_A", side, day, dateStr, tif);
+                            "TRADER_A", side, day, tif);
                         ordersCreated++;
                         if (tif is null) tradesCreated++;
 
@@ -150,14 +149,14 @@ public static class SeedDataController
                                 var tradePrice = Math.Round(price * tpVar, 2);
 
                                 await conn.ExecuteAsync(@"
-                                    INSERT INTO history.trades
-                                        (OrderId, LastQty, LastPx, Symbol, Asset, EnteringTrader,
-                                         Entity, TradeDate, EnteringFirm, OmsInstance, Side, businessDate)
+                                    INSERT INTO history.trades_new
+                                        (OrderId, Qty, Price, Symbol, Asset, EnteringTrader,
+                                         EntityId, TradeDate, ExecBroker, Instance, Side)
                                     VALUES
                                         (@OrderId, @Qty, @Price, @Symbol, @Asset, 'TRADER_A',
-                                         'MESA_TESTE', @TradeDate, '935', 'OMS_TESTE', @Side, @BusinessDate)",
+                                         'MESA_TESTE', @TradeDate, '935', 'OMS_TESTE', @Side)",
                                     new { OrderId = orderId, Qty = tradeQty, Price = tradePrice,
-                                          Symbol = symbol, Asset = symbol[..4], TradeDate = day, BusinessDate = dateStr, Side = side }, tx);
+                                          Symbol = symbol, Asset = symbol[..4], TradeDate = day, Side = side }, tx);
                                 tradesCreated++;
                                 remainQty -= tradeQty;
                             }
@@ -175,7 +174,7 @@ public static class SeedDataController
                         var price = Math.Round(basePrice * priceVar, 2);
                         var side = (dayIdx + i) % 2 == 0 ? "BUY" : "SELL";
 
-                        await InsertOrderAsync(conn, tx, qty, price, symbol, symbol[..4], "TRADER_B", side, day, dateStr);
+                        await InsertOrderAsync(conn, tx, qty, price, symbol, symbol[..4], "TRADER_B", side, day);
                         ordersCreated++;
                         tradesCreated++;
                     }
@@ -189,7 +188,7 @@ public static class SeedDataController
                         : 5780m + dayIdx * 10m;
 
                     await InsertOrderAsync(conn, tx, miniQty, miniPrice, miniSym + monthSuffix, miniSym,
-                        "TRADER_C", dayIdx % 2 == 0 ? "BUY" : "SELL", day, dateStr);
+                        "TRADER_C", dayIdx % 2 == 0 ? "BUY" : "SELL", day);
                     ordersCreated++;
                     tradesCreated++;
 
@@ -201,7 +200,7 @@ public static class SeedDataController
                         : 5780m + dayIdx * 15m;
 
                     await InsertOrderAsync(conn, tx, cheioQty, cheioPrice, cheioSym + monthSuffix, cheioSym,
-                        "TRADER_C", dayIdx % 2 == 0 ? "SELL" : "BUY", day, dateStr);
+                        "TRADER_C", dayIdx % 2 == 0 ? "SELL" : "BUY", day);
                     ordersCreated++;
                     tradesCreated++;
 
@@ -214,40 +213,40 @@ public static class SeedDataController
                         var di1Symbol = $"DI1{DI1MonthCodes[maturityMonth]}{maturityYear % 100}";
                         var di1Qty = 10 + (dayIdx % 8) * 5;
 
-                        await InsertOrderAsync(conn, tx, di1Qty, 0, di1Symbol, "DI1", "TRADER_C", "BUY", day, dateStr);
+                        await InsertOrderAsync(conn, tx, di1Qty, 0, di1Symbol, "DI1", "TRADER_C", "BUY", day);
                         ordersCreated++;
                         tradesCreated++;
                     }
 
                     // Sintético de dólar (DOL + WDO) a cada 3 dias: só a ordem do sintético chega;
-                    // a perna de cada trade vem no sufixo do UniqueTradeId e LastQty no padrão do cheio
+                    // a perna de cada trade vem no sufixo do UniqueTradeId e Qty no padrão do cheio
                     if (dayIdx % 3 == 1)
                     {
                         var synthSymbol = "BTGDOL" + monthSuffix;
                         var synthPrice = 5780m + dayIdx * 12m;
-                        var synthOrderId = await conn.QuerySingleAsync<long>(@"
-                            INSERT INTO history.orders
-                                (CumQty, AvgPx, Symbol, EnteringTrader,
-                                 Entity, TradeDate, EnteringFirm, OmsInstance, Side, businessDate)
+                        var synthOrderId = Guid.NewGuid().ToString();
+                        await conn.ExecuteAsync(@"
+                            INSERT INTO history.orders_new
+                                (OrderId, CumQty, AvgPx, Symbol, EnteringTrader,
+                                 Entity, TradeDate, ExecBroker, Instance, Side)
                             VALUES
-                                (3, @Price, @Symbol, 'TRADER_C',
-                                 'MESA_TESTE', @TradeDate, '935', 'OMS_TESTE', 'BUY', @BusinessDate)
-                            RETURNING Id",
-                            new { Price = synthPrice, Symbol = synthSymbol, TradeDate = day, BusinessDate = dateStr }, tx);
+                                (@OrderId, 3, @Price, @Symbol, 'TRADER_C',
+                                 'MESA_TESTE', @TradeDate, '935', 'OMS_TESTE', 'BUY')",
+                            new { OrderId = synthOrderId, Price = synthPrice, Symbol = synthSymbol, TradeDate = day }, tx);
                         ordersCreated++;
 
                         foreach (var (leg, lastQty) in new[] { ("DOL", 2m), ("WDO", 0.6m), ("WDO", 0.4m) })
                         {
                             await conn.ExecuteAsync(@"
-                                INSERT INTO history.trades
-                                    (OrderId, LastQty, LastPx, UniqueTradeId, Symbol, Asset, EnteringTrader,
-                                     Entity, TradeDate, EnteringFirm, OmsInstance, Side, businessDate)
+                                INSERT INTO history.trades_new
+                                    (OrderId, Qty, Price, UniqueTradeId, Symbol, Asset, EnteringTrader,
+                                     EntityId, TradeDate, ExecBroker, Instance, Side)
                                 VALUES
                                     (@OrderId, @Qty, @Price, @UniqueTradeId, @Symbol, 'DOL', 'TRADER_C',
-                                     'MESA_TESTE', @TradeDate, '935', 'OMS_TESTE', 'BUY', @BusinessDate)",
+                                     'MESA_TESTE', @TradeDate, '935', 'OMS_TESTE', 'BUY')",
                                 new { OrderId = synthOrderId, Qty = lastQty, Price = synthPrice,
-                                      UniqueTradeId = $"{synthOrderId}{tradesCreated}-{leg}", Symbol = synthSymbol,
-                                      TradeDate = day, BusinessDate = dateStr }, tx);
+                                      UniqueTradeId = $"{tradesCreated}-{leg}", Symbol = synthSymbol,
+                                      TradeDate = day }, tx);
                             tradesCreated++;
                         }
                     }
@@ -291,35 +290,35 @@ public static class SeedDataController
     }
 
     /// <summary>
-    /// history.orders não tem Asset (só os trades têm): ordem não-GTC ganha um trade de execução
+    /// history.orders_new não tem Asset (só os trades têm): ordem não-GTC ganha um trade de execução
     /// (CumQty @ AvgPx) com a raiz. GTC/GTD gera os trades à parte.
     /// </summary>
-    private static async Task<long> InsertOrderAsync(IDbConnection conn, IDbTransaction tx,
+    private static async Task<string> InsertOrderAsync(IDbConnection conn, IDbTransaction tx,
         decimal qty, decimal price, string symbol, string asset, string trader, string side,
-        DateOnly day, string businessDate, string? timeInForce = null)
+        DateOnly day, string? timeInForce = null)
     {
-        var orderId = await conn.QuerySingleAsync<long>(@"
-            INSERT INTO history.orders
-                (CumQty, AvgPx, Symbol, EnteringTrader, Entity,
-                 TradeDate, EnteringFirm, OmsInstance, Side, businessDate, TimeInForce)
+        var orderId = Guid.NewGuid().ToString();
+        await conn.ExecuteAsync(@"
+            INSERT INTO history.orders_new
+                (OrderId, CumQty, AvgPx, Symbol, EnteringTrader, Entity,
+                 TradeDate, ExecBroker, Instance, Side, TimeInForce)
             VALUES
-                (@Qty, @Price, @Symbol, @Trader, 'MESA_TESTE',
-                 @TradeDate, '935', 'OMS_TESTE', @Side, @BusinessDate, @TimeInForce)
-            RETURNING Id",
-            new { Qty = qty, Price = price, Symbol = symbol, Trader = trader, Side = side,
-                  TradeDate = day, BusinessDate = businessDate, TimeInForce = timeInForce }, tx);
+                (@OrderId, @Qty, @Price, @Symbol, @Trader, 'MESA_TESTE',
+                 @TradeDate, '935', 'OMS_TESTE', @Side, @TimeInForce)",
+            new { OrderId = orderId, Qty = qty, Price = price, Symbol = symbol, Trader = trader, Side = side,
+                  TradeDate = day, TimeInForce = timeInForce }, tx);
 
         if (timeInForce is null)
         {
             await conn.ExecuteAsync(@"
-                INSERT INTO history.trades
-                    (OrderId, LastQty, LastPx, Symbol, Asset, EnteringTrader,
-                     Entity, TradeDate, EnteringFirm, OmsInstance, Side, businessDate)
+                INSERT INTO history.trades_new
+                    (OrderId, Qty, Price, Symbol, Asset, EnteringTrader,
+                     EntityId, TradeDate, ExecBroker, Instance, Side)
                 VALUES
                     (@OrderId, @Qty, @Price, @Symbol, @Asset, @Trader,
-                     'MESA_TESTE', @TradeDate, '935', 'OMS_TESTE', @Side, @BusinessDate)",
+                     'MESA_TESTE', @TradeDate, '935', 'OMS_TESTE', @Side)",
                 new { OrderId = orderId, Qty = qty, Price = price, Symbol = symbol, Asset = asset,
-                      Trader = trader, Side = side, TradeDate = day, BusinessDate = businessDate }, tx);
+                      Trader = trader, Side = side, TradeDate = day }, tx);
         }
 
         return orderId;

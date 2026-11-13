@@ -112,7 +112,7 @@ CREATE INDEX idx_daily_billing_month ON financial_engine.daily_billing(Broker, K
 
 CREATE TABLE financial_engine.order_billing (
     Id BIGSERIAL PRIMARY KEY,
-    OrderId BIGINT NOT NULL,
+    OrderId VARCHAR(100) NOT NULL,      -- history.orders_new.OrderId
     Asset VARCHAR(50) NULL,             -- raiz do ativo; sintetico gera 1 linha por perna (mesmo OrderId)
     DailyBillingId BIGINT NOT NULL REFERENCES financial_engine.daily_billing(Id) ON DELETE CASCADE,
     Broker INT NOT NULL,
@@ -244,44 +244,43 @@ CREATE TABLE financial_engine.market_data_billing (
 -- ============================================
 -- 3. Tabelas history (ordens de sistema externo)
 -- ============================================
-CREATE TABLE history.orders (
-    Id BIGSERIAL PRIMARY KEY,
+CREATE TABLE history.orders_new (
+    OrderId VARCHAR(100) NOT NULL,      -- id externo (GUID hoje; string para aceitar outros formatos)
     CumQty DECIMAL(18,4) NOT NULL,
     AvgPx DECIMAL(18,6) NOT NULL,
     Symbol VARCHAR(50) NOT NULL,        -- ex: PETR4, WINZ25, DI1F27, BTGDOLZ26 (sintetico). Raiz (Asset) so existe nos trades
     EnteringTrader VARCHAR(100) NOT NULL,
     Entity VARCHAR(100) NOT NULL,
-    TradeDate DATE NOT NULL,
-    EnteringFirm VARCHAR(20) NOT NULL,
-    OmsInstance VARCHAR(50) NOT NULL,
+    TradeDate DATE NOT NULL,            -- dia da ordem; GTC/GTD repete o OrderId em varios dias
+    ExecBroker VARCHAR(20) NOT NULL,
+    Instance VARCHAR(50) NOT NULL,
     Side VARCHAR(10) NOT NULL,
-    businessDate VARCHAR(20) NOT NULL,
-    TimeInForce VARCHAR(10) NULL
+    TimeInForce VARCHAR(10) NULL,
+    PRIMARY KEY (OrderId, TradeDate)
 );
 
-CREATE INDEX idx_orders_business_date ON history.orders(businessDate);
-CREATE INDEX idx_orders_firm_date ON history.orders(EnteringFirm, businessDate);
+CREATE INDEX idx_orders_new_trade_date ON history.orders_new(TradeDate);
+CREATE INDEX idx_orders_new_broker_date ON history.orders_new(ExecBroker, TradeDate);
 
-CREATE TABLE history.trades (
+CREATE TABLE history.trades_new (
     Id BIGSERIAL PRIMARY KEY,
-    OrderId BIGINT NOT NULL,
-    LastQty DECIMAL(18,4) NOT NULL,
-    LastPx DECIMAL(18,6) NOT NULL,      -- LastQty no padrao do contrato cheio (sintetico: 0,2 WDO = 1 mini)
+    OrderId VARCHAR(100) NOT NULL,
+    Qty DECIMAL(18,4) NOT NULL,
+    Price DECIMAL(18,6) NOT NULL,      -- Qty no padrao do contrato cheio (sintetico: 0,2 WDO = 1 mini)
     UniqueTradeId VARCHAR(100) NULL,    -- sintetico: sufixo indica a perna (1234-WDO, 321-DOL)
     Symbol VARCHAR(50) NOT NULL,
     Asset VARCHAR(50) NULL,             -- raiz do ativo: PETR, WIN, DI1, DOL (AssetClass e deduzida no codigo)
     EnteringTrader VARCHAR(100) NOT NULL,
-    Entity VARCHAR(100) NOT NULL,
+    EntityId VARCHAR(100) NOT NULL,     -- trades nao tem Entity, so o id (nao usado no calculo)
     TradeDate DATE NOT NULL,
-    EnteringFirm VARCHAR(20) NOT NULL,
-    OmsInstance VARCHAR(50) NOT NULL,
-    Side VARCHAR(10) NOT NULL,
-    businessDate VARCHAR(20) NOT NULL
+    ExecBroker VARCHAR(20) NOT NULL,
+    Instance VARCHAR(50) NOT NULL,
+    Side VARCHAR(10) NOT NULL
 );
 
-CREATE INDEX idx_trades_orderid_date ON history.trades(OrderId, businessDate);
+CREATE INDEX idx_trades_new_orderid_date ON history.trades_new(OrderId, TradeDate);
 -- Mapa Symbol -> Asset do dia (OrdersRepository.GetSymbolAssetsAsync)
-CREATE INDEX idx_trades_business_date ON history.trades(businessDate);
+CREATE INDEX idx_trades_new_trade_date ON history.trades_new(TradeDate);
 
 -- ============================================
 -- 4. Views (depois de todas as tabelas)
